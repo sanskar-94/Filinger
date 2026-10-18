@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+data/
+artifacts/
+mlruns/
+spark-warehouse/
+web/node_modules/
+web/.next/
+.env
