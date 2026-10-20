@@ -1,0 +1,76 @@
+# Databricks Asset Bundle for the Phase 1 pipeline.
+# Deploy with: databricks bundle deploy -t dev && databricks bundle run filings_pipeline -t dev
+bundle:
+  name: filings-lab
+
+variables:
+  lake_root:
+    description: S3 root of the lakehouse
+    default: s3://filings-lab-dev/lake
+  wheel:
+    description: Built wheel of this repo (python -m build)
+    default: ../../dist/filings_lab-0.1.0-py3-none-any.whl
+
+artifacts:
+  filings_lab:
+    type: whl
+    path: ../..
+    build: python -m build --wheel
+
+resources:
+  jobs:
+    filings_pipeline:
+      name: filings-lab-pipeline
+      schedule:
+        quartz_cron_expression: "0 0 6 ? * MON-FRI"   # after EDGAR nightly index is published
+        timezone_id: America/New_York
+      job_clusters:
+        - job_cluster_key: etl
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: m6gd.2xlarge
+            autoscale: {min_workers: 2, max_workers: 16}
+            aws_attributes:
+              availability: SPOT_WITH_FALLBACK
+              instance_profile_arn: ${var.instance_profile}
+            spark_conf:
+              spark.sql.adaptive.enabled: "true"
+              spark.sql.parquet.compression.codec: zstd
+      tasks:
+        - task_key: download
+          description: Rate limited EDGAR download (single node, 8 req/s budget)
+          job_cluster_key: etl
+          python_wheel_task:
+            package_name: filings_lab
+            entry_point: flab
+            parameters: ["download", "--index", "${var.lake_root}/bronze/index.parquet", "--raw", "${var.lake_root}/bronze/raw"]
+          libraries: [{whl: ${var.wheel}}]
+        - task_key: transform
+          depends_on: [{task_key: download}]
+          job_cluster_key: etl
+          python_wheel_task:
+            package_name: filings_lab
+            entry_point: flab
+            parameters: ["spark", "--index", "${var.lake_root}/bronze/index.parquet", "--raw", "${var.lake_root}/bronze/raw",
+                         "--prices", "${var.lake_root}/bronze/prices.parquet", "--lake", "${var.lake_root}"]
+          libraries: [{whl: ${var.wheel}}]
+        - task_key: features
+          depends_on: [{task_key: transform}]
+          job_cluster_key: etl
+          python_wheel_task:
+            package_name: filings_lab
+            entry_point: flab
+            parameters: ["features", "--lake", "${var.lake_root}"]
+          libraries: [{whl: ${var.wheel}}]
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      instance_profile: arn:aws:iam::123456789012:instance-profile/filings-lab-dev
+  prod:
+    mode: production
+    variables:
+      lake_root: s3://filings-lab-prod/lake
+      instance_profile: arn:aws:iam::123456789012:instance-profile/filings-lab-prod
