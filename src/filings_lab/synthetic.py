@@ -222,7 +222,7 @@ def generate(cfg: SyntheticConfig | None = None, out_dir: str | Path | None = No
     mkt = rng.normal(0.0003, 0.011, n_days)
     out = Path(out_dir) if out_dir else None
     used: set[str] = set()
-    companies, filings, truth = [], [], []
+    companies, filings, truth, facts = [], [], [], []
     price_frames = []
     years = range(days[0].year, days[-1].year)  # fiscal years whose reports land inside the window
 
@@ -236,6 +236,8 @@ def generate(cfg: SyntheticConfig | None = None, out_dir: str | Path | None = No
         ret = beta * mkt + rng.normal(0, idio, n_days)
         volume = rng.lognormal(13, 0.3, n_days)
         q_prev, q = 0.0, rng.normal()
+        revenue = rng.uniform(200, 5000)
+        assets = revenue * rng.uniform(2, 4)
         risk_keys = list(rng.choice([k for k, _ in RISKS], size=6, replace=False))
         seq = 0
         first = len(filings)
@@ -318,6 +320,19 @@ def generate(cfg: SyntheticConfig | None = None, out_dir: str | Path | None = No
                     - 0.004 * (risk_change == "increasing")
                 )
                 filings.append(_mk_filing(cik, name, ticker, sic, form, rep_day, _accepted(rng, rep_day, "periodic"), seq, "", period))
+                revenue *= 1 + 0.015 + 0.03 * q + rng.normal(0, 0.02)
+                assets *= 1 + 0.01 + 0.01 * q + rng.normal(0, 0.01)
+                margin = 0.08 + 0.05 * q + rng.normal(0, 0.02)
+                values = {
+                    "revenue": revenue, "net_income": revenue * margin, "assets": assets,
+                    "liabilities": assets * float(np.clip(0.5 - 0.08 * q + rng.normal(0, 0.05), 0.1, 0.95)),
+                    "cash": assets * float(np.clip(0.12 + 0.03 * q + rng.normal(0, 0.02), 0.01, 0.6)),
+                    "op_cash_flow": revenue * (margin + rng.normal(0.03, 0.02)),
+                }
+                for metric, val in values.items():
+                    facts.append({"cik": cik, "metric": metric, "value": float(val), "period_end": pd.Timestamp(period),
+                                  "fp": "FY" if is_annual else f"Q{qtr}", "form": form, "filed": rep_day.normalize(),
+                                  "accession": filings[-1]["accession"]})
                 truth.append(_truth(filings[-1], "none", tone_label, liquidity, litigation, risk_change,
                                     lit_sentence, effect, cfg.periodic_noise))
                 filings[-1]["_html"] = _html(name, form, period, sections, rng)
@@ -356,7 +371,8 @@ def generate(cfg: SyntheticConfig | None = None, out_dir: str | Path | None = No
     comp = pd.DataFrame(companies)
     idx = pd.DataFrame([{k: v for k, v in f.items() if k != "_html"} for f in filings])
     tr = pd.DataFrame(truth)
-    result = {"companies": comp, "index": idx, "prices": prices, "truth": tr}
+    fx = pd.DataFrame(facts)
+    result = {"companies": comp, "index": idx, "prices": prices, "truth": tr, "facts": fx}
     if out:
         out.mkdir(parents=True, exist_ok=True)
         for f in filings:
@@ -369,6 +385,7 @@ def generate(cfg: SyntheticConfig | None = None, out_dir: str | Path | None = No
         comp.to_parquet(out / "companies.parquet", index=False)
         prices.to_parquet(out / "prices.parquet", index=False)
         tr.to_parquet(out / "truth.parquet", index=False)
+        fx.to_parquet(out / "facts.parquet", index=False)
         (out / "config.json").write_text(json.dumps(asdict(cfg), indent=2))
     return result
 
