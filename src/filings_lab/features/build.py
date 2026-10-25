@@ -94,4 +94,5 @@ def feature_groups(columns) -> dict[str, list[str]]:
         "text_rules": [c for c in cols if "guidance" in c or "going_concern" in c],
         "financial": [c for c in cols if c.startswith("fin_")],
         "meta": [c for c in cols if c.startswith(("form_", "item_"))] + (["month"] if "month" in cols else []),
+        "llm": [c for c in cols if c.startswith("llm_")],
     }

@@ -48,12 +48,16 @@ class Phase2Config:
 def feature_sets(columns) -> dict[str, list[str]]:
     g = feature_groups(columns)
     text = g["text_tone"] + g["text_change"] + g["text_rules"]
-    return {
+    sets = {
         "market_meta": g["market"] + g["meta"],
         "market_fundamentals": g["market"] + g["financial"] + g["meta"],
         "text_only": text + g["meta"],
         "all": g["market"] + g["financial"] + text + g["meta"],
     }
+    if g["llm"]:  # Phase 3 signals: does the LLM add information on top of everything else?
+        sets["llm_only"] = g["llm"] + g["meta"]
+        sets["all_plus_llm"] = sets["all"] + g["llm"]
+    return sets
 
 
 def _fit_lgb(X: pd.DataFrame, y: np.ndarray, t0, t1, cfg: Phase2Config):
@@ -178,12 +182,15 @@ def run(features: pd.DataFrame, out_dir: str | Path, cfg: Phase2Config | None = 
             "dm_log_loss_all_vs_market": stats.diebold_mariano(
                 _log_loss_vec(m["y"], m["pred"]), _log_loss_vec(m["y"], m["pred_base"])),
         }
+        if "all_plus_llm" in oofs:
+            ml = oofs["all_plus_llm"].merge(full[["accession", "pred"]], on="accession", suffixes=("", "_all"))
+            comparison["delong_all_plus_llm_vs_all"] = stats.delong_test(ml["y"], ml["pred"], ml["pred_all"])
 
         # drop one group ablation on the full model, BH corrected
         groups = feature_groups(df.columns)
         abl = []
         for gname, gcols in groups.items():
-            if not gcols or gname == "meta":
+            if not gcols or gname in ("meta", "llm"):
                 continue
             cols = [c for c in sets["all"] if c not in gcols]
             o = walk_forward(df, cols, cfg).merge(full[["accession", "pred"]], on="accession", suffixes=("", "_full"))
@@ -242,6 +249,11 @@ def render_report(metrics: dict, abl: pd.DataFrame, imp: pd.DataFrame) -> str:
               "## Does text add information beyond market features?", "",
               f"DeLong paired test, all vs market and meta: AUC difference {_fmt(d['diff'])} (se {_fmt(d['se'])}), p = {_fmt(d['p_value'])}.",
               f"Diebold Mariano on per event log loss: DM = {_fmt(dm['dm'], 2)}, p = {_fmt(dm['p_value'])} (negative favours the full model).", ""]
+    if "delong_all_plus_llm_vs_all" in c:
+        x = c["delong_all_plus_llm_vs_all"]
+        lines.append(f"LLM signals on top of all classical features: AUC difference {_fmt(x['diff'])} "
+                     f"(se {_fmt(x['se'])}), DeLong p = {_fmt(x['p_value'])}.")
+        lines.append("")
     if metrics.get("permutation"):
         p = metrics["permutation"]
         lines.append(f"Permutation test ({p['n_perm']} refits with labels shuffled within month): observed AUC {_fmt(p['observed'])}, "

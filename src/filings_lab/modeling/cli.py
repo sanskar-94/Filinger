@@ -8,6 +8,8 @@ def _run(a):
     from .train import Phase2Config, run
 
     feats = pd.read_parquet(f"{a.lake.rstrip('/')}/gold/features")
+    for extra in a.extra or []:  # e.g. llm_signals.parquet from flab llm-features
+        feats = feats.merge(pd.read_parquet(extra), on="accession", how="left")
     cfg = Phase2Config(label=a.label, n_splits=a.splits, n_permutations=a.permutations)
     m = run(feats, a.out, cfg)
     for name, v in m["results"].items():
@@ -22,6 +24,7 @@ def _register(p):
     p.add_argument("--label", default="label_up")
     p.add_argument("--splits", type=int, default=6)
     p.add_argument("--permutations", type=int, default=20)
+    p.add_argument("--extra", action="append", help="extra per accession feature parquet (repeatable)")
     p.set_defaults(fn=_run)
 
 
