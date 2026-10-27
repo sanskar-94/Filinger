@@ -52,8 +52,7 @@ def main(argv=None):
 
     import pandas as pd
 
-    from filings_lab.llm.dataset import (assign_splits, build_inputs, labels_from_synthetic_truth, load_gold,
-                                         write_dataset)
+    from filings_lab.llm.dataset import assign_splits, build_inputs, labels_from_synthetic_truth, load_gold, write_dataset
     from filings_lab.llm.eval_harness import evaluate
     from filings_lab.llm.providers import HFExtractor, RuleExtractor
     from filings_lab.llm.train_lora import LoraTrainConfig, train

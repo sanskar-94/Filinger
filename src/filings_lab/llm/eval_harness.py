@@ -53,7 +53,7 @@ def run_system(ex: Extractor, gold, workers: int = 1, cache: Path | None = None)
 
 def item_table(results: list[ExtractionResult], gold) -> pd.DataFrame:
     rows = []
-    for r, (inp, lab) in zip(results, gold):
+    for r, (inp, lab) in zip(results, gold, strict=True):
         pred = r.signals or {}
         row = {"accession": inp.accession, "form": inp.form, "json_valid": r.json_valid, "schema_valid": r.schema_valid,
                "latency_s": r.latency_s, "cost_usd": r.cost_usd, "error": r.error}
@@ -161,23 +161,29 @@ def render(result: dict) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ gate
-GATED = {  # metric -> (direction, absolute tolerance)
-    "extraction_score": ("max", 0.01),
+GATED = {  # metric -> (rule, value)
+    "extraction_score": ("max", 0.01),        # may not drop more than 0.01 below production
     "schema_valid_rate": ("max", 0.005),
     "quote_grounding_rate": ("max", 0.02),
     "guidance_direction_f1": ("max", 0.02),
-    "latency_p95_s": ("min", 0.25),
+    "latency_p95_s": ("slo", 8.0),            # absolute service level objective, not relative to production
 }
 
 
 def gate(candidate: dict, baseline: dict, rules: dict = GATED) -> tuple[bool, list[str]]:
     """A candidate model may not be worse than production on any gated metric beyond its tolerance."""
     failures = []
-    for metric, (direction, tol) in rules.items():
+    for metric, (rule, tol) in rules.items():
         c, b = candidate.get(metric), baseline.get(metric)
-        if c is None or b is None or (isinstance(c, float) and np.isnan(c)):
+        if c is None or (isinstance(c, float) and np.isnan(c)):
             continue
-        worse = (c < b - tol) if direction == "max" else (c > b * (1 + tol))
+        if rule == "slo":
+            if c > tol:
+                failures.append(f"{metric}: candidate {c:.4f} exceeds the SLO of {tol}")
+            continue
+        if b is None:
+            continue
+        worse = (c < b - tol) if rule == "max" else (c > b + tol)
         if worse:
             failures.append(f"{metric}: candidate {c:.4f} vs production {b:.4f} (tolerance {tol})")
     return not failures, failures

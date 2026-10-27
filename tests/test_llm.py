@@ -8,8 +8,14 @@ import pytest
 from filings_lab.llm.dataset import assign_splits, build_inputs, labels_from_synthetic_truth, load_gold, write_dataset
 from filings_lab.llm.eval_harness import evaluate, gate, item_table, macro_f1, summarize
 from filings_lab.llm.prompts import ExtractionInput, chat_messages, select_paragraphs
-from filings_lab.llm.providers import (AnthropicBatchLabeler, AnthropicExtractor, LabelExtractor,
-                                       OpenAICompatExtractor, RuleExtractor, token_cost)
+from filings_lab.llm.providers import (
+    AnthropicBatchLabeler,
+    AnthropicExtractor,
+    LabelExtractor,
+    OpenAICompatExtractor,
+    RuleExtractor,
+    token_cost,
+)
 from filings_lab.llm.schema import FilingSignals, json_schema, parse
 
 LABEL = {"guidance_direction": "raised", "management_tone": "positive", "liquidity_concern": False,

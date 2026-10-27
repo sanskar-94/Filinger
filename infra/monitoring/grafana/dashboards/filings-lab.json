@@ -1,0 +1,416 @@
+{
+  "uid": "filings-lab",
+  "title": "Filings Intelligence Lab: production",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "tags": [
+    "filings-lab"
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Requests / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(flab_requests_total[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Error rate",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.02
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(flab_requests_total{status=~\"5..\"}[5m])) / sum(rate(flab_requests_total[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Fallback share",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(flab_extractions_total{outcome=\"fallback\"}[15m])) / sum(rate(flab_extractions_total[15m]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Max feature PSI",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(flab_feature_psi)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p50 / p95 by route",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le, route) (rate(flab_request_latency_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{route}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(flab_request_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{route}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Extractions by outcome",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (system, outcome) (rate(flab_extractions_total[5m]))",
+          "legendFormat": "{{system}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Feature drift (PSI)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "flab_feature_psi",
+          "legendFormat": "{{feature}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Predicted probability distribution",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_0.1uantile(0.1, sum by (le) (rate(flab_prediction_score_bucket[30m])))",
+          "legendFormat": "p10"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_0.5uantile(0.5, sum by (le) (rate(flab_prediction_score_bucket[30m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_0.9uantile(0.9, sum by (le) (rate(flab_prediction_score_bucket[30m])))",
+          "legendFormat": "p90"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "vLLM throughput (tokens / s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(vllm:generation_tokens_total[5m]))",
+          "legendFormat": "generation"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(vllm:prompt_tokens_total[5m]))",
+          "legendFormat": "prompt"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "vLLM queue and running",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(vllm:num_requests_waiting)",
+          "legendFormat": "waiting"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(vllm:num_requests_running)",
+          "legendFormat": "running"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU utilisation",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg by (gpu) (DCGM_FI_DEV_GPU_UTIL)",
+          "legendFormat": "gpu {{gpu}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "A/B traffic by variant (Phase 6)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (variant) (rate(flab_ab_requests_total[5m]))",
+          "legendFormat": "{{variant}}"
+        }
+      ]
+    }
+  ]
+}

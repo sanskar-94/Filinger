@@ -1,0 +1,12 @@
+# vLLM serving the base model with LoRA adapters (current production adapter and the A/B candidate).
+# Adapters are synced from S3 by an init container in Kubernetes, or mounted in docker compose.
+ARG VLLM_VERSION=v0.33.0
+FROM vllm/vllm-openai:${VLLM_VERSION}
+ENV HF_HOME=/models/hf VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+ENTRYPOINT ["vllm", "serve"]
+CMD ["Qwen/Qwen2.5-3B-Instruct", \
+     "--served-model-name", "qwen-base", \
+     "--enable-lora", "--max-lora-rank", "16", "--max-loras", "2", \
+     "--lora-modules", "filings-extractor=/adapters/champion", "filings-extractor-b=/adapters/challenger", \
+     "--max-model-len", "8192", "--gpu-memory-utilization", "0.90", \
+     "--enable-prefix-caching", "--port", "8000"]

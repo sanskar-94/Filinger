@@ -38,7 +38,7 @@ def company_text_features(sections: pd.DataFrame) -> pd.DataFrame:
 
     # year over year change ("Lazy Prices"): compare with the same form and section about a year earlier
     sec = sections[sections["section"].isin(CHANGE_SECTIONS)].sort_values("date_filed")
-    for (form, section), g in sec.groupby(["form", "section"]):
+    for (_form, section), g in sec.groupby(["form", "section"]):
         dates = pd.to_datetime(g["date_filed"]).to_numpy()
         texts, accs = g["text"].tolist(), g["accession"].tolist()
         for i in range(len(g)):

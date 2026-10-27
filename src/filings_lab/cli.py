@@ -61,7 +61,7 @@ def cmd_local(a):
     if "raw_uri" not in idx.columns:
         from .edgar.download import raw_uri
 
-        idx["raw_uri"] = [raw_uri(a.raw, c, acc) for c, acc in zip(idx["cik"], idx["accession"])]
+        idx["raw_uri"] = [raw_uri(a.raw, c, acc) for c, acc in zip(idx["cik"], idx["accession"], strict=True)]
     prices = pd.read_parquet(a.prices)
     print(local.run(idx, prices, a.lake, workers=a.workers, market=a.market))
 

@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: filings-lab
+  labels: {release: kube-prometheus-stack}
+spec:
+  selector: {matchExpressions: [{key: app, operator: In, values: [filings-api, vllm]}]}
+  endpoints: [{port: http, path: /metrics, interval: 15s}]
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: filings-lab
+  labels: {release: kube-prometheus-stack}
+spec:
+  groups:
+    - name: filings-lab-recording
+      rules:
+        - record: flab_requests_per_second
+          expr: sum by (namespace, pod) (rate(flab_requests_total[2m]))

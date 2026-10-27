@@ -36,7 +36,7 @@ class PurgedWalkForward:
         start = t[int(len(t) * self.min_train_frac)]
         edges = pd.date_range(pd.Timestamp(start), pd.Timestamp(t[-1]), periods=self.n_splits + 1).to_numpy().copy()
         edges[-1] = edges[-1] + np.timedelta64(1, "D")  # include the last observation
-        return list(zip(edges[:-1], edges[1:]))
+        return list(zip(edges[:-1], edges[1:], strict=True))
 
     def split(self, t0, t1) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         t0, t1 = _as_dt(t0), _as_dt(t1)

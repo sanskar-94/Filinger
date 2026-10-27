@@ -10,6 +10,8 @@ variables:
   wheel:
     description: Built wheel of this repo (python -m build)
     default: ../../dist/filings_lab-0.1.0-py3-none-any.whl
+  instance_profile:
+    description: Instance profile with read and write access to the lake bucket (infra/aws/main.tf output)
 
 artifacts:
   filings_lab:
@@ -44,7 +46,7 @@ resources:
             package_name: filings_lab
             entry_point: flab
             parameters: ["download", "--index", "${var.lake_root}/bronze/index.parquet", "--raw", "${var.lake_root}/bronze/raw"]
-          libraries: [{whl: ${var.wheel}}]
+          libraries: [{whl: "${var.wheel}"}]
         - task_key: transform
           depends_on: [{task_key: download}]
           job_cluster_key: etl
@@ -53,7 +55,7 @@ resources:
             entry_point: flab
             parameters: ["spark", "--index", "${var.lake_root}/bronze/index.parquet", "--raw", "${var.lake_root}/bronze/raw",
                          "--prices", "${var.lake_root}/bronze/prices.parquet", "--lake", "${var.lake_root}"]
-          libraries: [{whl: ${var.wheel}}]
+          libraries: [{whl: "${var.wheel}"}]
         - task_key: features
           depends_on: [{task_key: transform}]
           job_cluster_key: etl
@@ -61,7 +63,7 @@ resources:
             package_name: filings_lab
             entry_point: flab
             parameters: ["features", "--lake", "${var.lake_root}"]
-          libraries: [{whl: ${var.wheel}}]
+          libraries: [{whl: "${var.wheel}"}]
 
 targets:
   dev:

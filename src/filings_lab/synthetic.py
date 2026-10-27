@@ -353,7 +353,7 @@ def generate(cfg: SyntheticConfig | None = None, out_dir: str | Path | None = No
                     filings[-1]["_html"] = _html(name, "8-K", "", docs, rng)
 
         # inject the event reactions into this company's return path
-        for f, t in zip(filings[first:], truth[first:]):
+        for f, t in zip(filings[first:], truth[first:], strict=True):
             d0 = event_day(pd.Timestamp(f["accepted_at"]), days)
             if d0 is None:
                 continue
@@ -379,7 +379,7 @@ def generate(cfg: SyntheticConfig | None = None, out_dir: str | Path | None = No
             p = out / "raw" / str(f["cik"]) / f"{f['accession']}.txt"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(f["_html"])
-        idx = idx.assign(raw_uri=[str(out / "raw" / str(c) / f"{a}.txt") for c, a in zip(idx["cik"], idx["accession"])])
+        idx = idx.assign(raw_uri=[str(out / "raw" / str(c) / f"{a}.txt") for c, a in zip(idx["cik"], idx["accession"], strict=True)])
         result["index"] = idx
         idx.to_parquet(out / "index.parquet", index=False)
         comp.to_parquet(out / "companies.parquet", index=False)

@@ -1,0 +1,29 @@
+# vLLM only accepts traffic from the API pods and Prometheus.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vllm-ingress
+spec:
+  podSelector: {matchLabels: {app: vllm}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: filings-api}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+      ports: [{port: 8000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: filings-api
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /readyz
+spec:
+  ingressClassName: alb
+  rules:
+    - host: api.filings-lab.example.com
+      http:
+        paths: [{path: /, pathType: Prefix, backend: {service: {name: filings-api, port: {number: 80}}}}]

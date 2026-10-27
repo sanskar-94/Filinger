@@ -1,0 +1,7 @@
+data/
+artifacts/
+mlruns/
+web/node_modules/
+web/.next/
+.git/
+**/__pycache__/

@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filings-api
+  labels: {app: filings-api}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+  selector: {matchLabels: {app: filings-api}}
+  template:
+    metadata:
+      labels: {app: filings-api}
+    spec:
+      serviceAccountName: filings-lab
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      initContainers:
+        - name: sync-artifacts  # pulls the registry and the gold feature tables the service reads
+          image: amazon/aws-cli:2.27.0
+          command: ["sh", "-c", "aws s3 sync $MODEL_S3_PREFIX /data/registry && aws s3 sync $LAKE_S3_PREFIX /data/lake/gold"]
+          envFrom: [{configMapRef: {name: filings-api}}]
+          volumeMounts: [{name: data, mountPath: /data}]
+      containers:
+        - name: api
+          image: filings-api:latest
+          ports: [{name: http, containerPort: 8080}]
+          envFrom: [{configMapRef: {name: filings-api}}]
+          env:
+            - name: FLAB_API_KEYS
+              valueFrom: {secretKeyRef: {name: filings-api-keys, key: keys}}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+          readinessProbe: {httpGet: {path: /readyz, port: http}, periodSeconds: 5, failureThreshold: 3}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 10, failureThreshold: 6}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: data, mountPath: /data, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: data, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+      topologySpreadConstraints:
+        - {maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: filings-api}}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: filings-api
+  labels: {app: filings-api}
+spec:
+  selector: {app: filings-api}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: filings-api
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: filings-api}
+  minReplicas: 2
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 65}}
+    - type: Pods  # served by prometheus-adapter from flab_requests_total
+      pods:
+        metric: {name: flab_requests_per_second}
+        target: {type: AverageValue, averageValue: "40"}
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 300, policies: [{type: Percent, value: 50, periodSeconds: 60}]}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: filings-api
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app: filings-api}}

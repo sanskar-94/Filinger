@@ -25,7 +25,7 @@ def run(index: pd.DataFrame, prices: pd.DataFrame, lake_root: str, workers: int 
     index["year"] = pd.to_datetime(index["date_filed"]).dt.year
     n_batches = max(1, min(len(index), workers * 8))
     bounds = np.linspace(0, len(index), n_batches + 1).astype(int)
-    batches = [index.iloc[a:b] for a, b in zip(bounds[:-1], bounds[1:]) if b > a]
+    batches = [index.iloc[a:b] for a, b in zip(bounds[:-1], bounds[1:], strict=True) if b > a]
     s_parts, p_parts = [], []
     if workers > 1:
         with ProcessPoolExecutor(max_workers=workers) as pool:

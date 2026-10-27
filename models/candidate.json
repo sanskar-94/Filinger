@@ -1,0 +1,9 @@
+{
+  "_comment": "The candidate under review. CI evaluates it on the frozen gold set and gates it against models/production.json.",
+  "extractor": {
+    "system": "rules"
+  },
+  "reaction_model": {
+    "feature_set": "all"
+  }
+}

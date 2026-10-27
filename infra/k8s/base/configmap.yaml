@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filings-api
+data:
+  FLAB_MODEL_URI: models:/filings-reaction@champion
+  FLAB_REGISTRY: /data/registry
+  FLAB_FEATURES: /data/lake/gold/features
+  FLAB_SIGNALS: /data/lake/gold/llm_signals.parquet
+  FLAB_LLM_BASE_URL: http://vllm.filings-lab.svc.cluster.local:8000/v1
+  FLAB_LLM_MODEL: filings-extractor
+  MODEL_S3_PREFIX: s3://filings-lab-prod/registry
+  LAKE_S3_PREFIX: s3://filings-lab-prod/lake/gold

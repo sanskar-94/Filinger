@@ -103,10 +103,8 @@ def extract_sections(text: str, form: str) -> dict[str, Section]:
 
 def _resolve_10q_parts(text: str, hits: list[tuple[int, str]]) -> list[tuple[int, str]]:
     """10-Q item numbers repeat in Part I and Part II. Use the 'Part II' marker to disambiguate."""
-    m = None
-    for m in re.finditer(r"^\s*part\s+ii\b", text, re.I | re.M):
-        pass  # last occurrence skips the TOC
-    part2 = m.start() if m else len(text)
+    marks = list(re.finditer(r"^\s*part\s+ii\b", text, re.I | re.M))
+    part2 = marks[-1].start() if marks else len(text)  # last occurrence skips the TOC
     out = []
     for pos, name in hits:
         if name.startswith("_"):

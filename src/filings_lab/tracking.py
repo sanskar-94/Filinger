@@ -14,9 +14,15 @@ except Exception:  # noqa: BLE001
     mlflow = None
 
 
+def mlflow_enabled() -> bool:
+    """Use MLflow only when it is installed and a tracking URI is configured, so tests and quick local runs
+    never create stray mlruns directories."""
+    return mlflow is not None and bool(os.environ.get("MLFLOW_TRACKING_URI"))
+
+
 @contextmanager
 def run(experiment: str, run_name: str, fallback_dir: str = "artifacts/runs"):
-    if mlflow is not None:
+    if mlflow_enabled():
         mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "file:./mlruns"))
         mlflow.set_experiment(experiment)
         with mlflow.start_run(run_name=run_name) as r:

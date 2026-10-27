@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  labels: {app: vllm}
+spec:
+  replicas: 1
+  strategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+  selector: {matchLabels: {app: vllm}}
+  template:
+    metadata:
+      labels: {app: vllm}
+    spec:
+      serviceAccountName: filings-lab
+      nodeSelector: {workload: gpu}
+      tolerations: [{key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}]
+      initContainers:
+        - name: sync-adapters  # champion and challenger LoRA adapters (A/B variants share one base model)
+          image: amazon/aws-cli:2.27.0
+          command: ["sh", "-c", "aws s3 sync s3://filings-lab-prod/adapters/champion /adapters/champion && aws s3 sync s3://filings-lab-prod/adapters/challenger /adapters/challenger"]
+          volumeMounts: [{name: adapters, mountPath: /adapters}]
+      containers:
+        - name: vllm
+          image: filings-vllm:latest
+          args: ["Qwen/Qwen2.5-3B-Instruct", "--served-model-name", "qwen-base", "--enable-lora", "--max-lora-rank", "16",
+                 "--max-loras", "2", "--lora-modules", "filings-extractor=/adapters/champion", "filings-extractor-b=/adapters/challenger",
+                 "--max-model-len", "8192", "--gpu-memory-utilization", "0.90", "--enable-prefix-caching", "--port", "8000"]
+          env:
+            - {name: HF_HOME, value: /models/hf}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+          ports: [{name: http, containerPort: 8000}]
+          resources:
+            requests: {cpu: "3", memory: 14Gi, nvidia.com/gpu: 1}
+            limits: {memory: 16Gi, nvidia.com/gpu: 1}
+          startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10, failureThreshold: 60}
+          readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 15, failureThreshold: 4}
+          volumeMounts:
+            - {name: adapters, mountPath: /adapters, readOnly: true}
+            - {name: hf-cache, mountPath: /models/hf}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - {name: adapters, emptyDir: {}}
+        - {name: hf-cache, emptyDir: {sizeLimit: 30Gi}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  labels: {app: vllm}
+spec:
+  selector: {app: vllm}
+  ports: [{name: http, port: 8000, targetPort: http}]
+---
+# GPU autoscaling on queue depth rather than CPU, which says nothing about a GPU server's load.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm
+spec:
+  scaleTargetRef: {name: vllm}
+  minReplicaCount: 1
+  maxReplicaCount: 4
+  cooldownPeriod: 600
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        query: sum(vllm:num_requests_waiting{namespace="filings-lab"})
+        threshold: "8"

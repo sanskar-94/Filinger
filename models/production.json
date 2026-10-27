@@ -1,0 +1,28 @@
+{
+  "_comment": "GitOps record of what is in production. Promotion is a pull request that edits this file; the model gate workflow refuses it if the candidate is worse on any gated metric. Metrics are on the synthetic world until real data is wired in.",
+  "reaction_model": {
+    "registry_uri": "models:/filings-reaction@champion",
+    "feature_set": "all",
+    "metrics": {
+      "auc": 0.5635,
+      "ic": 0.0822
+    }
+  },
+  "extractor": {
+    "system": "rules",
+    "served_as": "fallback until a fine tuned adapter passes the gate",
+    "gold_set": "data/llm_dataset/gold.jsonl",
+    "gold_limit": 400,
+    "metrics": {
+      "extraction_score": 0.8634,
+      "schema_valid_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "quote_grounding_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "management_tone_f1": 0.5542,
+      "liquidity_concern_f1": 0.8994,
+      "litigation_risk_f1": 1.0,
+      "latency_p95_s": 0.001
+    }
+  }
+}

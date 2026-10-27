@@ -1,0 +1,52 @@
+# Local production like stack: API, MLflow, Prometheus, Grafana; vLLM with the "gpu" profile.
+#   docker compose up --build                 # CPU only, rules fallback for extraction
+#   docker compose --profile gpu up --build   # adds vLLM (needs an NVIDIA GPU)
+services:
+  api:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      FLAB_MODEL_URI: models:/filings-reaction@champion
+      FLAB_REGISTRY: /data/registry
+      FLAB_FEATURES: /data/lake/gold/features
+      FLAB_SIGNALS: /data/lake/gold/llm_signals.parquet
+      FLAB_LLM_BASE_URL: ${FLAB_LLM_BASE_URL:-}
+      FLAB_LLM_MODEL: filings-extractor
+      FLAB_API_KEYS: ${FLAB_API_KEYS:-}
+    volumes:
+      - ./artifacts/registry:/data/registry:ro
+      - ./data/lake:/data/lake:ro
+  vllm:
+    profiles: ["gpu"]
+    build: {context: ., dockerfile: Dockerfile.vllm}
+    ports: ["8000:8000"]
+    volumes:
+      - ./artifacts/lora:/adapters:ro
+      - hf-cache:/models/hf
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.17.2
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////mlflow/mlflow.db --artifacts-destination /mlflow/artifacts
+    ports: ["5000:5000"]
+    volumes: [mlflow:/mlflow]
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["9090:9090"]
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+volumes:
+  mlflow: {}
+  hf-cache: {}

@@ -1,0 +1,58 @@
+# Blocks any change that would ship a model scoring worse than production.
+# Triggers on changes to models, features, training code or configs. The candidate is described in
+# models/candidate.json; production in models/production.json. Promotion = a PR editing production.json,
+# which this gate must pass before merge (make it a required check in branch protection).
+name: model-gate
+on:
+  pull_request:
+    paths:
+      - "models/**"
+      - "configs/**"
+      - "src/filings_lab/features/**"
+      - "src/filings_lab/modeling/**"
+      - "src/filings_lab/llm/**"
+permissions: {contents: read}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Optional: a staging vLLM endpoint serving the candidate adapter. Without it the gate evaluates the
+      # systems that can run on a CPU runner (rules) and the reaction model.
+      CANDIDATE_LLM_URL: ${{ secrets.CANDIDATE_LLM_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -e ".[ml,serve,dev]" tabulate duckdb
+      - name: Build the frozen evaluation world (deterministic seed)
+        run: |
+          flab synth --out data/synthetic --companies 60
+          flab local --index data/synthetic/index.parquet --prices data/synthetic/prices.parquet --lake data/lake
+          flab features --lake data/lake
+      - name: Reaction model candidate
+        run: flab train --permutations 0 --out artifacts/phase2
+      - name: Extractor candidate
+        run: |
+          SYSTEM=$(python -c "import json;print(json.load(open('models/candidate.json'))['extractor']['system'])")
+          if [ -n "$CANDIDATE_LLM_URL" ]; then SYSTEM="vllm:${CANDIDATE_LLM_URL}|filings-extractor-b|guided"; fi
+          flab llm-dataset --lake data/lake
+          flab llm-eval --systems "$SYSTEM" --limit 400 --out artifacts/phase3
+          echo "SYSTEM=$SYSTEM" >> "$GITHUB_ENV"
+      - name: Gate against production
+        run: |
+          NAME=$(python -c "import json;print(next(iter(json.load(open('artifacts/phase3/eval.json'))['summary'])))")
+          flab gate --production models/production.json \
+                    --reaction-metrics artifacts/phase2/metrics.json \
+                    --extractor-eval artifacts/phase3/eval.json --system "$NAME" \
+                    --summary "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-gate-reports
+          path: |
+            artifacts/phase2/report.md
+            artifacts/phase2/metrics.json
+            artifacts/phase3/report.md
+            artifacts/phase3/eval.json
