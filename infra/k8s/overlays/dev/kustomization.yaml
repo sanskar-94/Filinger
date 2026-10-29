@@ -4,6 +4,7 @@ resources: [../../base]
 images:
   - {name: filings-api, newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/filings-api, newTag: dev}
   - {name: filings-vllm, newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/filings-vllm, newTag: dev}
+  - {name: filings-web, newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/filings-web, newTag: dev}
 patches:
   - target: {kind: HorizontalPodAutoscaler, name: filings-api}
     patch: |-

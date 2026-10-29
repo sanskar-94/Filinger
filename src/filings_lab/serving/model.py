@@ -39,6 +39,25 @@ class ReactionModel:
     def reference(self) -> dict:
         return self.meta.get("reference", {})
 
+    def explain(self, features: dict, top: int = 5) -> dict:
+        """Probability plus the features that moved it most (LightGBM TreeSHAP contributions)."""
+        X = pd.DataFrame([features]).reindex(columns=self.features).apply(pd.to_numeric, errors="coerce")
+        p = float(self.booster.predict(X)[0])
+        contrib = self.booster.predict(X, pred_contrib=True)[0][:-1]
+        order = np.argsort(-np.abs(contrib))[:top]
+        drivers = [{"feature": self.features[i], "value": _num(features.get(self.features[i])),
+                    "contribution": float(contrib[i])} for i in order]
+        return {"probability_up": p, "model_version": self.version, "drivers": drivers,
+                "missing_features": int(X.isna().sum(axis=1).iloc[0])}
+
+
+def _num(v):
+    try:
+        f = float(v)
+        return None if np.isnan(f) else f
+    except (TypeError, ValueError):
+        return None
+
 
 def build_artifact(features_df: pd.DataFrame, out_dir: str | Path, feature_set: str = "all", label: str = "label_up",
                    num_rounds: int | None = None, metrics: dict | None = None) -> Path:

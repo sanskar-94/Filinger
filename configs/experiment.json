@@ -1,0 +1,11 @@
+{
+  "name": "retrieval-diversity-v1",
+  "salt": "2026-11-retrieval-diversity",
+  "variants": {
+    "A": {"weight": 0.5, "diversify": true, "k": 4, "extractor_model": "filings-extractor", "description": "champion: BM25 with MMR diversification, production adapter"},
+    "B": {"weight": 0.5, "diversify": false, "k": 4, "extractor_model": "filings-extractor-b", "description": "challenger: plain BM25 ranking, candidate adapter"}
+  },
+  "primary_metric": "thumbs_up_rate",
+  "guardrails": ["latency_p95_s", "citation_valid_rate"],
+  "active": true
+}

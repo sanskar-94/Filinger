@@ -11,3 +11,4 @@ spark-warehouse/
 web/node_modules/
 web/.next/
 .env
+web/*.tsbuildinfo

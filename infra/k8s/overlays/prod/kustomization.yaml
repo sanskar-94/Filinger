@@ -4,6 +4,7 @@ resources: [../../base]
 images:  # the deploy workflow pins these to the commit SHA
   - {name: filings-api, newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/filings-api, newTag: latest}
   - {name: filings-vllm, newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/filings-vllm, newTag: latest}
+  - {name: filings-web, newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/filings-web, newTag: latest}
 patches:
   - target: {kind: Deployment, name: filings-api}
     patch: |-

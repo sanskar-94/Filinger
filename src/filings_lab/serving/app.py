@@ -40,6 +40,7 @@ class ServiceConfig:
     llm_model: str = field(default_factory=lambda: os.environ.get("FLAB_LLM_MODEL", "filings-extractor"))
     api_keys: frozenset = field(default_factory=lambda: frozenset(
         k for k in os.environ.get("FLAB_API_KEYS", "").split(",") if k))
+    lake: str = field(default_factory=lambda: os.environ.get("FLAB_LAKE", "data/lake"))
     breaker_failures: int = 5
     breaker_cooldown_s: float = 30.0
     max_input_chars: int = 12_000
@@ -120,11 +121,14 @@ class Metrics:
         self.ks_p = Gauge("flab_feature_ks_pvalue", "KS test p value vs training", ["feature"], registry=r)
         self.model_info = Gauge("flab_model_info", "Active model", ["version", "feature_set", "trained_through"], registry=r)
         self.breaker = Gauge("flab_llm_breaker_open", "1 when the LLM circuit breaker is open", registry=r)
+        self.ab_requests = Counter("flab_ab_requests_total", "Agent requests by experiment variant", ["experiment", "variant"], registry=r)
+        self.agent_citation_valid = Histogram("flab_agent_citation_valid_rate", "Share of valid citations per answer",
+                                              ["variant"], registry=r, buckets=(0.5, 0.8, 0.9, 0.95, 0.99, 1.0))
 
 
 # ------------------------------------------------------------------------------------------------ app
 def create_app(config: ServiceConfig | None = None, model=None, extractor: Extractor | None = None,
-               feature_store: OfflineFeatureStore | None = None) -> FastAPI:
+               feature_store: OfflineFeatureStore | None = None, agent_service=None) -> FastAPI:
     cfg = config or ServiceConfig()
     app = FastAPI(title="Filings Intelligence Lab API", version="1.0.0")
     m = Metrics()
@@ -217,18 +221,12 @@ def create_app(config: ServiceConfig | None = None, model=None, extractor: Extra
         mdl = state["model"]
         if mdl is None:
             raise HTTPException(503, "model not loaded")
-        X = pd.DataFrame([features]).reindex(columns=mdl.features).apply(pd.to_numeric, errors="coerce")
-        p = float(mdl.booster.predict(X)[0])
-        contrib = mdl.booster.predict(X, pred_contrib=True)[0][:-1]
-        top = np.argsort(-np.abs(contrib))[:5]
+        out = mdl.explain(features)
         m.predictions.labels(mdl.version).inc()
-        m.score.observe(p)
+        m.score.observe(out["probability_up"])
         if state["monitor"] is not None:
-            state["monitor"].observe({**features, "prediction": p})
-        return {"probability_up": p, "model_version": mdl.version,
-                "drivers": [{"feature": mdl.features[i], "value": features.get(mdl.features[i]),
-                             "contribution": float(contrib[i])} for i in top],
-                "missing_features": int(X.isna().sum(axis=1).iloc[0])}
+            state["monitor"].observe({**features, "prediction": out["probability_up"]})
+        return out
 
     @app.post("/v1/score", dependencies=[Depends(auth)])
     def score(req: ScoreRequest):
@@ -251,7 +249,18 @@ def create_app(config: ServiceConfig | None = None, model=None, extractor: Extra
         return {"accession": accession, **{k: _jsonable(feats.get(k)) for k in keep},
                 "signals": {k: _jsonable(v) for k, v in signals.items()}, "score": _score(feats)}
 
-    app.state.config, app.state.metrics, app.state.breaker = cfg, m, breaker
+    if agent_service is None and os.environ.get("FLAB_AGENT", "1") == "1" and os.path.exists(cfg.lake):
+        try:
+            from ..agent.service import AgentService
+
+            agent_service = AgentService.from_env(cfg.lake, scorer=_score if state["model"] is not None else None)
+        except Exception as exc:  # noqa: BLE001 - the scoring API stays up without the agent
+            state["agent_error"] = str(exc)
+    if agent_service is not None:
+        from ..agent.api import build_router
+
+        app.include_router(build_router(agent_service, auth, m))
+    app.state.config, app.state.metrics, app.state.breaker, app.state.agent = cfg, m, breaker, agent_service
     return app
 
 

@@ -13,9 +13,22 @@ services:
       FLAB_LLM_BASE_URL: ${FLAB_LLM_BASE_URL:-}
       FLAB_LLM_MODEL: filings-extractor
       FLAB_API_KEYS: ${FLAB_API_KEYS:-}
+      FLAB_LAKE: /data/lake
+      FLAB_EXPERIMENT: /config/experiment.json
+      FLAB_EVENT_DB: /state/experiments.db
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - ./artifacts/registry:/data/registry:ro
       - ./data/lake:/data/lake:ro
+      - ./configs:/config:ro
+      - state:/state
+  web:
+    build: ./web
+    ports: ["3000:3000"]
+    environment:
+      FLAB_API_URL: http://api:8080
+      FLAB_API_KEY: ${FLAB_API_KEY:-}
+    depends_on: [api]
   vllm:
     profiles: ["gpu"]
     build: {context: ., dockerfile: Dockerfile.vllm}
@@ -48,5 +61,6 @@ services:
       - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports: ["3000:3000"]
 volumes:
+  state: {}
   mlflow: {}
   hf-cache: {}

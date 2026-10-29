@@ -2,7 +2,7 @@ name: deploy
 on:
   push:
     branches: [main]
-    paths: ["src/**", "Dockerfile", "Dockerfile.vllm", "infra/k8s/**", "pyproject.toml"]
+    paths: ["src/**", "web/**", "Dockerfile", "Dockerfile.vllm", "infra/k8s/**", "pyproject.toml"]
   workflow_dispatch:
 permissions: {contents: read, id-token: write}
 env:
@@ -28,6 +28,12 @@ jobs:
           tags: ${{ env.REGISTRY }}/filings-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: true
+          tags: ${{ env.REGISTRY }}/filings-web:${{ github.sha }}
       - name: Build and push vLLM image
         uses: docker/build-push-action@v6
         with:
@@ -50,8 +56,10 @@ jobs:
         run: |
           kustomize edit set image filings-api=$REGISTRY/filings-api:${{ github.sha }}
           kustomize edit set image filings-vllm=$REGISTRY/filings-vllm:${{ github.sha }}
+          kustomize edit set image filings-web=$REGISTRY/filings-web:${{ github.sha }}
           kubectl apply -k .
       - run: kubectl -n filings-lab rollout status deploy/filings-api --timeout=10m
       - run: kubectl -n filings-lab rollout status deploy/vllm --timeout=20m
+      - run: kubectl -n filings-lab rollout status deploy/filings-web --timeout=10m
       - name: Smoke test
         run: kubectl -n filings-lab run smoke --rm -i --restart=Never --image=curlimages/curl:8.10.1 -- curl -fsS http://filings-api/readyz

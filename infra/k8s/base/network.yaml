@@ -27,3 +27,6 @@ spec:
     - host: api.filings-lab.example.com
       http:
         paths: [{path: /, pathType: Prefix, backend: {service: {name: filings-api, port: {number: 80}}}}]
+    - host: app.filings-lab.example.com
+      http:
+        paths: [{path: /, pathType: Prefix, backend: {service: {name: filings-web, port: {number: 80}}}}]
