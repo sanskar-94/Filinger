@@ -2,10 +2,32 @@
   "name": "retrieval-diversity-v1",
   "salt": "2026-11-retrieval-diversity",
   "variants": {
-    "A": {"weight": 0.5, "diversify": true, "k": 4, "extractor_model": "filings-extractor", "description": "champion: BM25 with MMR diversification, production adapter"},
-    "B": {"weight": 0.5, "diversify": false, "k": 4, "extractor_model": "filings-extractor-b", "description": "challenger: plain BM25 ranking, candidate adapter"}
+    "A": {
+      "weight": 0.5,
+      "diversify": true,
+      "k": 4,
+      "extractor_model": "filings-extractor",
+      "description": "champion: BM25 with MMR diversification, production adapter"
+    },
+    "B": {
+      "weight": 0.5,
+      "diversify": false,
+      "k": 4,
+      "extractor_model": "filings-extractor-b",
+      "description": "challenger: plain BM25 ranking, candidate adapter"
+    }
   },
   "primary_metric": "thumbs_up_rate",
-  "guardrails": ["latency_p95_s", "citation_valid_rate"],
-  "active": true
+  "guardrails": {
+    "latency_p95_s": {
+      "max_relative_increase": 0.2
+    },
+    "citation_valid_rate": {
+      "max_absolute_decrease": 0.01
+    }
+  },
+  "active": true,
+  "planned_mde": 0.04,
+  "analysis": "sequential",
+  "max_rated_per_arm": 8000
 }

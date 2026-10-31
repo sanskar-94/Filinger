@@ -18,8 +18,11 @@ class Experiment:
     salt: str
     variants: dict[str, dict] = field(default_factory=dict)  # variant -> {"weight": float, ...config}
     primary_metric: str = "thumbs_up_rate"
-    guardrails: list[str] = field(default_factory=list)
+    guardrails: dict | list = field(default_factory=dict)  # metric -> threshold config
     active: bool = True
+    planned_mde: float = 0.04
+    analysis: str = "fixed"           # "sequential" when the readout is watched continuously
+    max_rated_per_arm: int | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> Experiment:

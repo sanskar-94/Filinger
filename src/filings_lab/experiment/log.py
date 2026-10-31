@@ -43,11 +43,12 @@ class EventLog:
         with self.lock, self._conn() as c:
             c.execute(f"INSERT OR REPLACE INTO exposures ({cols}) VALUES ({', '.join('?' * len(row))})", tuple(row.values()))
 
-    def feedback(self, request_id: str, rating: int, comment: str | None = None) -> bool:
+    def feedback(self, request_id: str, rating: int, comment: str | None = None, ts: float | None = None) -> bool:
         with self.lock, self._conn() as c:
             if not c.execute("SELECT 1 FROM exposures WHERE request_id = ?", (request_id,)).fetchone():
                 return False
-            c.execute("INSERT OR REPLACE INTO feedback VALUES (?, ?, ?, ?)", (request_id, time.time(), int(rating), comment))
+            c.execute("INSERT OR REPLACE INTO feedback VALUES (?, ?, ?, ?)",
+                      (request_id, ts if ts is not None else time.time(), int(rating), comment))
         return True
 
     def frame(self, experiment: str | None = None) -> pd.DataFrame:

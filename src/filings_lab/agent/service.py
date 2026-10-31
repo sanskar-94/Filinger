@@ -34,7 +34,7 @@ class AgentService:
         v = self.experiment.assign(user_id)
         return v, self.experiment.config(v)
 
-    def ask(self, question: str, ticker: str | None = None, user_id: str = "anonymous") -> dict:
+    def ask(self, question: str, ticker: str | None = None, user_id: str = "anonymous", ts: float | None = None) -> dict:
         variant, cfg = self.variant_for(user_id)
         tb = ToolBox(self.store, self.index, scorer=self.scorer, diversify=cfg.get("diversify", True))
         if self.mode == "claude":
@@ -46,7 +46,8 @@ class AgentService:
             ans = ExtractiveAgent(tb, k=cfg.get("k", 4)).ask(question, ticker)
         request_id = uuid.uuid4().hex
         if self.log is not None:
-            self.log.exposure(request_id=request_id, experiment=self.experiment.name if self.experiment else "none",
+            self.log.exposure(**({"ts": ts} if ts is not None else {}), request_id=request_id,
+                              experiment=self.experiment.name if self.experiment else "none",
                               variant=variant, user_id=user_id, ticker=ticker, mode=ans.mode,
                               latency_s=ans.latency_s, n_citations=len(ans.citations),
                               citation_valid_rate=ans.citation_valid_rate, cost_usd=ans.cost_usd, error=ans.error)

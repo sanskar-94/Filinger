@@ -1,0 +1,42 @@
+// Experiment measures (table: fact_ab_exposures)
+Exposures = COUNTROWS ( fact_ab_exposures )
+Rated = SUM ( fact_ab_exposures[rated] )
+Thumbs Up = SUM ( fact_ab_exposures[thumbs_up] )
+Thumbs Up Rate = DIVIDE ( [Thumbs Up], [Rated] )
+Rating Rate = DIVIDE ( [Rated], [Exposures] )
+Users = DISTINCTCOUNT ( fact_ab_exposures[user_key] )
+
+Rate A = CALCULATE ( [Thumbs Up Rate], fact_ab_exposures[variant] = "A" )
+Rate B = CALCULATE ( [Thumbs Up Rate], fact_ab_exposures[variant] = "B" )
+Lift (points) = [Rate B] - [Rate A]
+Lift (relative) = DIVIDE ( [Rate B], [Rate A] ) - 1
+
+// Wilson 95% interval for the rate in the current filter context
+Wilson Low =
+VAR n = [Rated]
+VAR p = [Thumbs Up Rate]
+VAR z = 1.959964
+RETURN DIVIDE ( p + z * z / ( 2 * n ) - z * SQRT ( p * ( 1 - p ) / n + z * z / ( 4 * n * n ) ), 1 + z * z / n )
+Wilson High =
+VAR n = [Rated]
+VAR p = [Thumbs Up Rate]
+VAR z = 1.959964
+RETURN DIVIDE ( p + z * z / ( 2 * n ) + z * SQRT ( p * ( 1 - p ) / n + z * z / ( 4 * n * n ) ), 1 + z * z / n )
+
+Latency p95 (ms) = PERCENTILEX.INC ( fact_ab_exposures, fact_ab_exposures[latency_s], 0.95 ) * 1000
+Citation Valid Rate = AVERAGE ( fact_ab_exposures[citation_valid_rate] )
+Cost per Answer = AVERAGE ( fact_ab_exposures[cost_usd] )
+
+// The decision and the clustered interval come from the statistical readout, not from DAX:
+// a DAX interval cannot account for repeat raters (user clustering).
+Decision = SELECTEDVALUE ( ab_summary[decision] )
+Diff CI Low (clustered) = CALCULATE ( MAX ( ab_summary[ci_low] ), ab_summary[method] = "user clustered delta", ab_summary[metric] = "thumbs_up_rate_diff" )
+Diff CI High (clustered) = CALCULATE ( MAX ( ab_summary[ci_high] ), ab_summary[method] = "user clustered delta", ab_summary[metric] = "thumbs_up_rate_diff" )
+
+// Model measures (tables: fact_filing_events, agg_model_monthly)
+Mean CAR (bps) = AVERAGE ( fact_filing_events[car] ) * 10000
+Hit Rate = DIVIDE ( COUNTROWS ( FILTER ( fact_filing_events, ( fact_filing_events[pred] > 0.5 ) = ( fact_filing_events[car] > 0 ) ) ),
+                    COUNTROWS ( FILTER ( fact_filing_events, NOT ISBLANK ( fact_filing_events[pred] ) ) ) )
+Mean IC = AVERAGE ( agg_model_monthly[ic] )
+IC t (naive) = DIVIDE ( [Mean IC], STDEV.S ( agg_model_monthly[ic] ) / SQRT ( COUNTROWS ( agg_model_monthly ) ) )
+Long Short (bps) = AVERAGE ( agg_model_monthly[long_short] ) * 10000
