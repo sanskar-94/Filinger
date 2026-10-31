@@ -1,0 +1,2 @@
+experiment,decision,mode,diff_pts,diff_low_pts,diff_high_pts,cs_low_pts,cs_high_pts,p_always_valid,p_clustered,design_effect,users,rated,srm_p,start,end,simulated,planted_diff_pts
+retrieval-diversity-v1,continue,sequential,2.603608404019453,0.6385759248727328,4.568640883166173,-0.4116876135838089,4.526835021423818,0.15545264025573546,0.009407127729467613,1.146307360181474,6000,10801,0.9588157233867474,2026-10-06,2026-11-03,True,4.081246762969398

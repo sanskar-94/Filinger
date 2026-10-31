@@ -5,6 +5,8 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 data/
+!dashboards/data/
+dashboards/data/fact_*.csv
 artifacts/
 mlruns/
 spark-warehouse/

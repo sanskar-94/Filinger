@@ -1,0 +1,6 @@
+metric,estimate,ci_low,ci_high,p_value,method,decision
+thumbs_up_rate_diff,0.02603608404019453,0.006385759248727328,0.04568640883166173,0.009407127729467613,user clustered delta,continue
+thumbs_up_rate_diff,0.02603608404019453,0.007674873653835214,0.04437030016145233,0.005449985528660939,Newcombe (independent answers),continue
+relative_lift,0.04330849230186584,0.009925688638128725,0.07669129596560295,0.009407127729467613,delta,continue
+latency_p95_relative_change,-0.031237835520001034,-0.037621793606943836,-0.0248960479558613,,"limit 0.2, breached=False",continue
+citation_valid_rate_change,0.0,,,,"limit -0.01, breached=False",continue

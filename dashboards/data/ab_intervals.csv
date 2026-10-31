@@ -1,0 +1,5 @@
+key,metric,method,estimate_pct,low_pct,high_pct
+thumbs_up_lift,Thumbs up rate,"user clustered delta, 95%",4.330849230186584,0.9925688638128726,7.669129596560295
+thumbs_up_lift_always_valid,"Thumbs up rate, always valid","mSPRT confidence sequence, 95%",4.330849230186584,-0.684802285018845,7.529949564400209
+latency_p95_faster,"p95 latency, faster is right","user cluster bootstrap, 95%",3.1237835520001034,2.4896047955861302,3.7621793606943834
+citation_validity,Citation validity,difference in mean,0.0,0.0,0.0
