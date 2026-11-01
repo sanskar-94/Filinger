@@ -25,6 +25,9 @@ def cmd_simulate(a):
         Path(a.db).unlink(missing_ok=True)
     exp = Experiment.load(a.experiment)
     svc = AgentService(DataStore(a.lake), exp, EventLog(a.db), mode="offline")
+    # offline there is no LLM, so both arms would run the same rule extractor; leave it out so the treatment
+    # stays identical for the whole test window (the simulated arms differ in retrieval only)
+    svc.serve_signals = False
     start = time.time() - (a.start_days_ago or a.days) * 86400
     truth = simulate(svc, a.users, a.mean_requests, a.rating_rate, {"A": a.rate_a, "B": a.rate_b}, a.user_sd,
                      a.days, start_ts=start, seed=a.seed, progress=True)

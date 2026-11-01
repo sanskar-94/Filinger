@@ -62,6 +62,12 @@ TOOL_DEFS = [
                          "required": ["accession"], "additionalProperties": False},
     },
     {
+        "name": "extract_signals",
+        "description": "Run the structured signal extractor (the fine tuned LLM serving this session) on one filing: guidance direction, management tone, liquidity concern, litigation risk and supporting quotes with paragraph ids.",
+        "input_schema": {"type": "object", "properties": {"accession": {"type": "string"}},
+                         "required": ["accession"], "additionalProperties": False},
+    },
+    {
         "name": "get_model_signal",
         "description": "The lab's model outputs for one filing: LLM extracted signals (guidance, tone, liquidity, litigation) and the predicted probability of a positive reaction with its main drivers.",
         "input_schema": {"type": "object", "properties": {"accession": {"type": "string"}},
@@ -81,11 +87,13 @@ def _clean(v):
 
 
 class ToolBox:
-    def __init__(self, store: DataStore, index: BM25Index | None = None, scorer=None, diversify: bool = True):
+    def __init__(self, store: DataStore, index: BM25Index | None = None, scorer=None, diversify: bool = True,
+                 extractor=None):
         self.store = store
         self.index = index or BM25Index(store.paragraphs)
         self.scorer = scorer  # callable(features dict) -> {"probability_up", "drivers"}; optional
         self.diversify = diversify
+        self.extractor = extractor  # the model version this session serves (A/B variant), optional
         self.seen_ids: set[str] = set()
 
     def reset(self) -> None:
@@ -162,6 +170,33 @@ class ToolBox:
         return {"accession": accession, "ticker": e["ticker"], "form": e["form"], "event_date": _clean(e["event_date"]),
                 "return_day0": _clean(e["ret_0"]), "car_0_2": _clean(e["car"]), "car_market_model": _clean(e.get("car_mm")),
                 "note": "CAR is the 3 trading day return in excess of the market (SPY) starting at the first tradable day."}
+
+    def t_extract_signals(self, accession):
+        from ..llm.dataset import TEXT_SECTIONS
+        from ..llm.prompts import ExtractionInput, select_paragraphs
+        from ..llm.providers import RuleExtractor
+
+        p = self.store.paragraphs
+        rows = p[(p["accession"] == accession) & p["section"].isin(TEXT_SECTIONS)].sort_values(["section", "para_idx"])
+        if rows.empty:
+            return {"error": f"no extractable text for {accession}"}
+        paras = select_paragraphs(rows[["paragraph_id", "section", "text"]].to_dict("records"))
+        inp = ExtractionInput(accession, str(rows["form"].iloc[0]), str(rows["company"].iloc[0] or ""), paras)
+        ex = self.extractor or RuleExtractor()
+        res = ex.extract(inp)
+        fallback = False
+        if not res.schema_valid and not isinstance(ex, RuleExtractor):
+            res, fallback = RuleExtractor().extract(inp), True
+        sig = res.signals or {}
+        quotes = []
+        for q in sig.get("key_quotes", []):
+            k = q.get("paragraph", 0) - 1
+            if 0 <= k < len(paras):
+                self.seen_ids.add(paras[k]["paragraph_id"])
+                quotes.append({"paragraph_id": paras[k]["paragraph_id"], "text": q.get("text", "")})
+        return {"accession": accession, "model": res.system, "fallback": fallback,
+                "signals": {k: sig.get(k) for k in ("guidance_direction", "management_tone", "liquidity_concern", "litigation_risk")},
+                "summary": sig.get("summary"), "quotes": quotes}
 
     def t_get_model_signal(self, accession):
         out: dict = {"accession": accession}

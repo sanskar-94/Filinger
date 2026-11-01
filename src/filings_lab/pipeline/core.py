@@ -54,7 +54,7 @@ def process_partition(batch: pd.DataFrame, reader) -> tuple[pd.DataFrame, pd.Dat
 
 
 EVENT_COLUMNS = [
-    "accession", "cik", "ticker", "form", "accepted_at", "event_date", "ret_0", "car", "car_mm", "beta",
+    "accession", "cik", "ticker", "form", "accepted_at", "event_date", "ret_0", "car", "car_tradable", "car_mm", "beta",
     "mom_250_30", "ret_5_1", "vol_60_1", "mkt_ret_20_1", "abn_volume_5_1",
 ]
 

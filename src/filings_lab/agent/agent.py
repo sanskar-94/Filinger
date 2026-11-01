@@ -174,6 +174,7 @@ class ExtractiveAgent:
     """No LLM: retrieve, quote the most relevant sentence of each hit, attach the market reaction."""
 
     PRICE_WORDS = re.compile(r"\b(react|reaction|stock|share price|return|move|moved|market)\b", re.I)
+    SIGNAL_WORDS = re.compile(r"\b(guidance|outlook|tone|liquidity|going concern|covenant|litigation|lawsuit|investigation)\b", re.I)
 
     def __init__(self, toolbox: ToolBox, k: int = 4):
         self.tb, self.k = toolbox, k
@@ -203,6 +204,15 @@ class ExtractiveAgent:
             sents = re.split(r"(?<=[.!?])\s+", r["text"])
             best = max(sents, key=lambda s: len(terms & set(re.findall(r"[a-z]{4,}", s.lower()))))
             lines.append(f"{n}. {r['form']} filed {r['date_filed']} ({r['section']}): \"{best.strip()}\" [cite:{r['paragraph_id']}]")
+        if self.SIGNAL_WORDS.search(question) and self.tb.extractor is not None:
+            sig = json.loads(self.tb.execute("extract_signals", {"accession": res[0]["accession"]}))
+            calls.append({"tool": "extract_signals", "input": {"accession": res[0]["accession"]}})
+            if "signals" in sig:
+                v = sig["signals"]
+                flags = [n for n, on in (("liquidity concern", v.get("liquidity_concern")), ("litigation risk", v.get("litigation_risk"))) if on]
+                lines.append(f"Extracted signals for the top filing ({sig['model']}): guidance {v.get('guidance_direction')}, "
+                             f"tone {v.get('management_tone')}" + (f", flags: {', '.join(flags)}" if flags else ", no liquidity or litigation flags")
+                             + " (model output).")
         if self.PRICE_WORDS.search(question):
             ev = json.loads(self.tb.execute("get_event_return", {"accession": res[0]["accession"]}))
             calls.append({"tool": "get_event_return", "input": {"accession": res[0]["accession"]}})

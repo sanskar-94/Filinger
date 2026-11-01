@@ -15,7 +15,7 @@ import pandas as pd
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS exposures (
     request_id TEXT PRIMARY KEY, ts REAL NOT NULL, experiment TEXT NOT NULL, variant TEXT NOT NULL,
-    user_id TEXT NOT NULL, ticker TEXT, mode TEXT, latency_s REAL, n_citations INTEGER,
+    user_id TEXT NOT NULL, ticker TEXT, mode TEXT, model_version TEXT, latency_s REAL, n_citations INTEGER,
     citation_valid_rate REAL, cost_usd REAL, error TEXT
 );
 CREATE TABLE IF NOT EXISTS feedback (
@@ -33,6 +33,9 @@ class EventLog:
         self.lock = threading.Lock()
         with self._conn() as c:
             c.executescript(SCHEMA)
+            cols = {r[1] for r in c.execute("PRAGMA table_info(exposures)")}
+            if "model_version" not in cols:  # migrate databases created before the column existed
+                c.execute("ALTER TABLE exposures ADD COLUMN model_version TEXT")
 
     def _conn(self):
         return sqlite3.connect(self.path, timeout=10)

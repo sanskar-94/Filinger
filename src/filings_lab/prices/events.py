@@ -87,6 +87,8 @@ def event_returns(
             continue
         rec["ret_0"] = float(r.iloc[i0])
         rec["car"] = float((win_r - win_m).sum())
+        # tradable version: enter at the day 0 close, so day 0 itself is not captured
+        rec["car_tradable"] = float((win_r.iloc[1:] - win_m.iloc[1:]).sum()) if len(win_r) > 1 else np.nan
         est_r = r.iloc[i0 + estimation[0] : i0 + estimation[1]]
         est_m = mkt.iloc[i0 + estimation[0] : i0 + estimation[1]]
         mm = market_model(est_r, est_m)

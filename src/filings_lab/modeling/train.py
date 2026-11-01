@@ -42,6 +42,9 @@ class Phase2Config:
     early_stopping: int = 50
     n_permutations: int = 20
     seed: int = 0
+    tune: bool = False
+    n_configs: int = 8
+    cost_bps: float = 10.0
     lgb_params: dict = field(default_factory=lambda: dict(LGB_PARAMS))
 
 
@@ -60,7 +63,7 @@ def feature_sets(columns) -> dict[str, list[str]]:
     return sets
 
 
-def _fit_lgb(X: pd.DataFrame, y: np.ndarray, t0, t1, cfg: Phase2Config):
+def _fit_lgb(X: pd.DataFrame, y: np.ndarray, t0, t1, cfg: Phase2Config, params: dict | None = None):
     """Fit with early stopping on the most recent ``val_frac`` of the window, purged from the fit part."""
     import lightgbm as lgb
 
@@ -69,7 +72,7 @@ def _fit_lgb(X: pd.DataFrame, y: np.ndarray, t0, t1, cfg: Phase2Config):
     cut = np.datetime64(pd.Series(t0).quantile(1 - cfg.val_frac), "ns")
     fit = (t1 < cut) & (t0 < cut - np.timedelta64(cfg.embargo_days, "D"))
     val = t0 >= cut
-    params = {**cfg.lgb_params, "seed": cfg.seed}
+    params = {**(params or cfg.lgb_params), "seed": cfg.seed}
     dfit = lgb.Dataset(X[fit], y[fit])
     dval = lgb.Dataset(X[val], y[val], reference=dfit)
     booster = lgb.train(params, dfit, cfg.max_rounds, valid_sets=[dval],
@@ -79,24 +82,37 @@ def _fit_lgb(X: pd.DataFrame, y: np.ndarray, t0, t1, cfg: Phase2Config):
     return lgb.train(params, lgb.Dataset(X, y), best), best
 
 
-def walk_forward(df: pd.DataFrame, cols: list[str], cfg: Phase2Config, y: np.ndarray | None = None) -> pd.DataFrame:
+def walk_forward(df: pd.DataFrame, cols: list[str], cfg: Phase2Config, y: np.ndarray | None = None,
+                 tune: bool = False) -> pd.DataFrame:
+    from .tuning import sample_configs, select
+
     y = df[cfg.label].astype(int).to_numpy() if y is None else y
     cv = PurgedWalkForward(cfg.n_splits, cfg.min_train_frac, pd.Timedelta(days=cfg.embargo_days))
     preds = np.full(len(df), np.nan)
     fold = np.full(len(df), -1)
-    rounds = []
+    rounds, chosen = [], []
+    configs = sample_configs(cfg.n_configs, cfg.seed) if tune else []
     for k, (tr, te) in enumerate(cv.split(df["event_date"], df["t1"])):
         assert_no_leakage(df["event_date"], df["t1"], tr, te)
-        model, best = _fit_lgb(df.iloc[tr][cols], y[tr], df["event_date"].iloc[tr], df["t1"].iloc[tr], cfg)
+        params = None
+        if tune:  # chosen inside the training window only, with purged k fold
+            params, _ = select(df.iloc[tr][cols], y[tr], df["event_date"].iloc[tr], df["t1"].iloc[tr], cfg.lgb_params,
+                               configs, embargo_days=cfg.embargo_days)
+            chosen.append({key: params[key] for key in ("num_leaves", "min_data_in_leaf", "feature_fraction", "lambda_l2", "learning_rate")})
+        model, best = _fit_lgb(df.iloc[tr][cols], y[tr], df["event_date"].iloc[tr], df["t1"].iloc[tr], cfg, params)
         preds[te] = model.predict(df.iloc[te][cols])
         fold[te] = k
         rounds.append(best)
-    out = df[["accession", "cik", "form", "event_date", cfg.target]].copy()
+    extra = [c for c in ("car_tradable",) if c in df.columns]
+    out = df[["accession", "cik", "form", "event_date", cfg.target, *extra]].copy()
     out["y"] = y
     out["pred"] = preds
     out["fold"] = fold
     out.attrs["rounds"] = rounds
-    return out[out["fold"] >= 0]
+    out.attrs["params"] = chosen
+    res = out[out["fold"] >= 0]
+    res.attrs.update(out.attrs)
+    return res
 
 
 def logistic_baseline(df: pd.DataFrame, cols: list[str], cfg: Phase2Config) -> pd.DataFrame:
@@ -209,6 +225,22 @@ def run(features: pd.DataFrame, out_dir: str | Path, cfg: Phase2Config | None = 
 
         perm = stats.permutation_test(y, month, perm_score, n_perm=cfg.n_permutations, seed=cfg.seed) if cfg.n_permutations else None
 
+        if cfg.tune:
+            tuned = walk_forward(df, sets["all"], cfg, tune=True)
+            results["all_tuned"] = {"n_features": len(sets["all"]), "rounds": tuned.attrs["rounds"],
+                                    "params": tuned.attrs["params"], **summarize(tuned, cfg.target)}
+            mt = tuned.merge(full[["accession", "pred"]], on="accession", suffixes=("", "_default"))
+            comparison["delong_tuned_vs_default"] = stats.delong_test(mt["y"], mt["pred"], mt["pred_default"])
+
+        from .backtest import backtest
+        from .calibration import calibration_report
+
+        bt = backtest(full, cfg.cost_bps)
+        cal = calibration_report(full)
+        bt["monthly"].to_csv(out / "backtest_monthly.csv", index=False)
+        bt["cost_curve"].to_csv(out / "backtest_cost_curve.csv", index=False)
+        cal["table"].to_csv(out / "calibration.csv", index=False)
+
         logit = logistic_baseline(df, sets["all"], cfg)
         results["logistic_all"] = summarize(logit, cfg.target)
         imp = importance(df, sets["all"], cfg)
@@ -217,10 +249,11 @@ def run(features: pd.DataFrame, out_dir: str | Path, cfg: Phase2Config | None = 
         abl.to_csv(out / "ablation.csv", index=False)
         imp.to_csv(out / "feature_importance.csv", index=False)
         metrics = {"config": {k: v for k, v in asdict(cfg).items()}, "results": results,
-                   "comparison": comparison, "permutation": perm}
+                   "comparison": comparison, "permutation": perm, "backtest": bt["summary"],
+                   "calibration": {"raw": cal["raw"], "isotonic": cal["isotonic"]}}
         (out / "metrics.json").write_text(json.dumps(metrics, indent=2, default=str))
-        (out / "report.md").write_text(render_report(metrics, abl, imp))
-        for f in ("metrics.json", "report.md", "ablation.csv", "feature_importance.csv"):
+        (out / "report.md").write_text(render_report(metrics, abl, imp, bt["cost_curve"]))
+        for f in ("metrics.json", "report.md", "ablation.csv", "feature_importance.csv", "backtest_monthly.csv"):
             tr.artifact(str(out / f))
         tr.metrics({"comparison.delong_p": comparison["delong_all_vs_market"]["p_value"]})
     return metrics
@@ -230,7 +263,7 @@ def _fmt(x, nd=4):
     return "n/a" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{x:.{nd}f}"
 
 
-def render_report(metrics: dict, abl: pd.DataFrame, imp: pd.DataFrame) -> str:
+def render_report(metrics: dict, abl: pd.DataFrame, imp: pd.DataFrame, cost_curve: pd.DataFrame | None = None) -> str:
     r = metrics["results"]
     lines = ["# Phase 2 report: classical baseline", "",
              "Out of fold results from purged walk forward validation. Each feature set uses identical folds.", "",
@@ -259,6 +292,28 @@ def render_report(metrics: dict, abl: pd.DataFrame, imp: pd.DataFrame) -> str:
         lines.append(f"Permutation test ({p['n_perm']} refits with labels shuffled within month): observed AUC {_fmt(p['observed'])}, "
                      f"null mean {_fmt(p['null_mean'])} (sd {_fmt(p['null_sd'])}), p = {_fmt(p['p_value'], 3)} "
                      f"(smallest attainable p with {p['n_perm']} permutations is {1 / (p['n_perm'] + 1):.3f}).")
+    if "delong_tuned_vs_default" in c:
+        x = c["delong_tuned_vs_default"]
+        lines.append(f"Purged k fold tuning inside each window against default parameters: AUC difference {_fmt(x['diff'])}, "
+                     f"DeLong p = {_fmt(x['p_value'])}.")
+        lines.append("")
+    b = metrics.get("backtest") or {}
+    if b:
+        lines += ["## Cost aware backtest (all features, LightGBM)", "",
+                  f"Monthly top minus bottom quintile, entering at the day 0 close ({b['target']}), {b['months']} months, "
+                  f"{b['cost_bps_per_side']:.0f} bps per side: mean net {_fmt(b['mean_net_bps'], 1)} bps per month "
+                  f"(gross {_fmt(b['mean_gross_bps'], 1)}), annualised Sharpe {_fmt(b['sharpe_annual'], 2)}, Newey West t "
+                  f"{_fmt(b['nw_t'], 2)}, hit rate {b['hit_rate']:.0%}, max drawdown {_fmt(b['max_drawdown_bps'], 0)} bps, "
+                  f"break even cost {_fmt(b['break_even_cost_bps'], 1)} bps per side.", ""]
+        if cost_curve is not None and len(cost_curve):
+            lines += [cost_curve[["cost_bps_per_side", "mean_net_bps", "sharpe_annual", "nw_t", "hit_rate"]].round(3).to_markdown(index=False), ""]
+    cal = metrics.get("calibration")
+    if cal:
+        lines += ["## Calibration (folds after the first)", "",
+                  f"Expected calibration error {_fmt(cal['raw']['ece'])} raw, {_fmt(cal['isotonic']['ece'])} after out of sample isotonic "
+                  f"recalibration. Brier {_fmt(cal['raw']['brier'])} raw, {_fmt(cal['isotonic']['brier'])} recalibrated "
+                  f"(reliability {_fmt(cal['raw']['reliability'])}, resolution {_fmt(cal['raw']['resolution'])}, "
+                  f"uncertainty {_fmt(cal['raw']['uncertainty'])}).", ""]
     lines += ["", "## Drop one group ablation (Benjamini Hochberg q values)", "", abl.round(4).to_markdown(index=False), "",
               "## Top features by mean |SHAP|", "", imp.head(20).round(5).to_markdown(index=False), ""]
     return "\n".join(lines)

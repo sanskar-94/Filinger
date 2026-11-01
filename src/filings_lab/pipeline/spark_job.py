@@ -26,7 +26,7 @@ PARAGRAPH_SCHEMA = (
 )
 EVENT_SCHEMA = (
     "accession string, cik long, ticker string, form string, accepted_at timestamp, event_date timestamp, "
-    "ret_0 double, car double, car_mm double, beta double, mom_250_30 double, ret_5_1 double, vol_60_1 double, "
+    "ret_0 double, car double, car_tradable double, car_mm double, beta double, mom_250_30 double, ret_5_1 double, vol_60_1 double, "
     "mkt_ret_20_1 double, abn_volume_5_1 double"
 )
 

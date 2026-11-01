@@ -151,3 +151,44 @@ def test_agent_routes(store, tmp_path, monkeypatch):
     assert c.post("/v1/feedback", json={"request_id": "nope", "rating": 1}).status_code == 404
     assert c.get(f"/v1/companies/{t}/prices").json()["series"]
     assert 'flab_ab_requests_total{experiment="x",variant=' in c.get("/metrics").text
+
+
+def test_each_variant_serves_its_own_model_version(store, tmp_path, monkeypatch):
+    from filings_lab.agent.service import AgentService
+
+    sent = []
+
+    class FakeVllm:
+        def post(self, url, json, timeout):
+            sent.append(json["model"])
+            body = {"guidance_direction": "raised", "management_tone": "positive", "liquidity_concern": False,
+                    "litigation_risk": False, "key_quotes": [{"paragraph": 1, "text": "x"}], "summary": "s"}
+            import json as _j
+            return SimpleNamespace(raise_for_status=lambda: None,
+                                   json=lambda: {"choices": [{"message": {"content": _j.dumps(body)}}], "usage": {}})
+
+    monkeypatch.setenv("FLAB_LLM_BASE_URL", "http://vllm:8000/v1")
+    exp = Experiment("x", "s", {"A": {"weight": 0.5, "extractor_model": "filings-extractor"},
+                                 "B": {"weight": 0.5, "extractor_model": "filings-extractor-b"}})
+    svc = AgentService(store, exp, EventLog(tmp_path / "e.db"), mode="offline")
+    for v in ("A", "B"):
+        svc.extractor_for(v, exp.config(v)).session = FakeVllm()
+    users = {exp.assign(f"user-{i}"): f"user-{i}" for i in range(50)}
+    t = store.index["ticker"].iloc[0]
+    for v, user in sorted(users.items()):
+        out = svc.ask("Did the company change its guidance?", t, user)
+        assert out["variant"] == v and any(c["tool"] == "extract_signals" for c in out["tool_calls"])
+    assert sent == ["filings-extractor", "filings-extractor-b"]
+    logged = svc.log.frame("x").sort_values("variant")["model_version"].tolist()
+    assert logged == ["vllm:filings-extractor", "vllm:filings-extractor-b"]
+
+
+def test_event_log_migrates_old_schema(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "old.db"
+    with sqlite3.connect(db) as c:
+        c.execute("CREATE TABLE exposures (request_id TEXT PRIMARY KEY, ts REAL, experiment TEXT, variant TEXT, user_id TEXT)")
+    EventLog(db)
+    with sqlite3.connect(db) as c:
+        assert "model_version" in {r[1] for r in c.execute("PRAGMA table_info(exposures)")}
