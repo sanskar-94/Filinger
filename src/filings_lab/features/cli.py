@@ -27,4 +27,17 @@ def _register(p):
     p.set_defaults(fn=_run)
 
 
-COMMANDS = {"features": (_register, "build the gold feature table")}
+def _run_spark(a):
+    from .spark_features import run
+
+    run(a.lake, a.facts if a.facts and Path(a.facts).exists() else None)
+
+
+def _register_spark(p):
+    p.add_argument("--lake", default="data/lake")
+    p.add_argument("--facts", default="data/synthetic/facts.parquet")
+    p.set_defaults(fn=_run_spark)
+
+
+COMMANDS = {"features": (_register, "build the gold feature table"),
+            "spark-features": (_register_spark, "build the gold feature table with PySpark")}

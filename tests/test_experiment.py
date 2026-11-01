@@ -109,3 +109,13 @@ def test_confidence_sequence_covers_truth_and_sequential_decisions():
     assert r.decision in ("continue", "ship treatment", "keep control")
     strong = analyze(_log_frame(5000, 0.5, 0.65, seed=9), "x", {"A": 0.5, "B": 0.5}, sequential=True)
     assert strong.decision == "ship treatment"
+
+
+def test_sequential_readout_stops_at_maximum_sample():
+    df = _log_frame(3000, 0.6, 0.6, seed=12)
+    rated_min = df[df["rating"].notna()].groupby("variant").size().min()
+    cap = int(rated_min * 0.6)
+    r = analyze(df, "x", {"A": 0.5, "B": 0.5}, sequential=True, max_rated_per_arm=cap)
+    assert r.primary["truncated_at_ts"] is not None
+    assert min(r.arms["A"]["rated"], r.arms["B"]["rated"]) == cap
+    assert r.decision in ("inconclusive", "ship treatment", "keep control")

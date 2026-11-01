@@ -20,7 +20,7 @@ class PriceSource(Protocol):
 
 def _standardise(df: pd.DataFrame, ticker: str | None = None) -> pd.DataFrame:
     cols = {c.lower().replace(" ", "_"): c for c in df.columns}
-    out = pd.DataFrame()
+    out = pd.DataFrame(index=df.index)  # rows first, so a scalar ticker fills every row
     out["ticker"] = df[cols["ticker"]] if "ticker" in cols else ticker
     out["date"] = pd.to_datetime(df[cols["date"]])
     close_col = cols.get("adj_close") or cols.get("adjclose") or cols.get("close")

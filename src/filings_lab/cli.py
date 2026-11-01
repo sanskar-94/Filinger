@@ -52,6 +52,37 @@ def cmd_download(a):
     print(out["download_status"].str.split(":").str[0].value_counts())
 
 
+def cmd_prices(a):
+    import pandas as pd
+
+    from .prices.build import build_prices
+    from .prices.sources import CsvPriceSource, StooqPriceSource
+
+    idx = pd.read_parquet(a.index)
+    source = CsvPriceSource(a.path) if a.source == "csv" else StooqPriceSource()
+    prices, report = build_prices(idx, source, a.start, a.end, a.market)
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    prices.to_parquet(a.out, index=False)
+    print(json.dumps(report, indent=2))
+
+
+def cmd_facts(a):
+    import pandas as pd
+
+    from .edgar.xbrl import facts_from_api, facts_from_bulk
+
+    ciks = set(pd.read_parquet(a.index)["cik"].astype(int))
+    if a.bulk:
+        facts = facts_from_bulk(a.bulk, ciks)
+    else:
+        from .edgar.client import EdgarClient
+
+        facts = facts_from_api(EdgarClient(cache_dir=a.cache), sorted(ciks))
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    facts.to_parquet(a.out, index=False)
+    print(f"{len(facts)} facts for {facts['cik'].nunique() if len(facts) else 0} of {len(ciks)} companies -> {a.out}")
+
+
 def cmd_local(a):
     import pandas as pd
 
@@ -70,6 +101,16 @@ def cmd_spark(a):
     from .pipeline import spark_job
 
     spark_job.run(a.index, a.raw, a.prices, a.lake, a.market)
+
+
+def cmd_dq(a):
+    from .pipeline.quality import report, run_checks, save
+
+    checks = run_checks(a.lake)
+    save(checks, a.out)
+    print(report(checks))
+    if any(c.status == "fail" for c in checks):
+        sys.exit(1)
 
 
 def cmd_sql(a):
@@ -113,6 +154,23 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--workers", type=int, default=4)
     s.set_defaults(fn=cmd_download)
 
+    s = sub.add_parser("prices", help="daily prices for every ticker in the index plus the market proxy")
+    s.add_argument("--index", required=True)
+    s.add_argument("--source", choices=["stooq", "csv"], default="stooq")
+    s.add_argument("--path", help="vendor CSV file or directory of TICKER.csv files (source csv)")
+    s.add_argument("--start", default="2013-01-01")
+    s.add_argument("--end", default="2024-12-31")
+    s.add_argument("--market", default="SPY")
+    s.add_argument("--out", default="data/lake/bronze/prices.parquet")
+    s.set_defaults(fn=cmd_prices)
+
+    s = sub.add_parser("facts", help="XBRL fundamentals for every company in the index")
+    s.add_argument("--index", required=True)
+    s.add_argument("--bulk", help="path to a downloaded companyfacts.zip")
+    s.add_argument("--cache", default="data/http_cache")
+    s.add_argument("--out", default="data/lake/bronze/facts.parquet")
+    s.set_defaults(fn=cmd_facts)
+
     for name, fn, help_ in (("local", cmd_local, "run the pipeline on one machine"),
                             ("spark", cmd_spark, "run the pipeline with PySpark")):
         s = sub.add_parser(name, help=help_)
@@ -123,6 +181,11 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("--market", default="SPY")
         s.add_argument("--workers", type=int, default=4)
         s.set_defaults(fn=fn)
+
+    s = sub.add_parser("dq", help="data quality gates over the lake; exits 1 on failure")
+    s.add_argument("--lake", default="data/lake")
+    s.add_argument("--out", default="artifacts/dq")
+    s.set_defaults(fn=cmd_dq)
 
     s = sub.add_parser("sql", help="run a SQL file from sql/ against the lake with DuckDB")
     s.add_argument("file")

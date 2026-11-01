@@ -55,6 +55,17 @@ def company_text_features(sections: pd.DataFrame) -> pd.DataFrame:
     return out.reset_index()
 
 
+def text_feature_columns() -> list[str]:
+    """Every column ``company_text_features`` can produce, in a fixed order (Spark needs a static schema)."""
+    base = list(section_features("placeholder text.").keys())
+    cols = []
+    for prefix, keep in SECTION_SPEC.values():
+        cols += [f"{prefix}_{k}" for k in (keep or base)]
+    for prefix in CHANGE_SECTIONS.values():
+        cols += [f"{prefix}_{k}" for k in ("sim_cosine", "sim_jaccard", "len_change")]
+    return cols
+
+
 def build_features(
     sections: pd.DataFrame, events: pd.DataFrame, index: pd.DataFrame, facts: pd.DataFrame | None = None
 ) -> pd.DataFrame:

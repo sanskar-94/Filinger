@@ -138,6 +138,15 @@ def analyze(df: pd.DataFrame, experiment: str, weights: dict[str, float], contro
     df["rated"] = df["rating"].notna()
     df["thumbs_up"] = (df["rating"] == 1).astype(int)
     reasons: list[str] = []
+    truncated_at = None
+    if sequential and max_rated_per_arm:
+        # a sequential test stops at its maximum sample: data after both arms reach it is not used
+        r = df[df["rated"]].sort_values("ts")
+        ca, cb = (r["variant"] == control).cumsum(), (r["variant"] == treatment).cumsum()
+        reached = r[(ca >= max_rated_per_arm) & (cb >= max_rated_per_arm)]
+        if len(reached):
+            truncated_at = float(reached["ts"].iloc[0])
+            df = df[df["ts"] <= truncated_at]
 
     # 1. sample ratio mismatch on users
     users = df.groupby("variant")["user_id"].nunique()
@@ -187,6 +196,8 @@ def analyze(df: pd.DataFrame, experiment: str, weights: dict[str, float], contro
         "msprt_confidence_sequence": (float(path["cs_low"].iloc[-1]), float(path["cs_high"].iloc[-1])),
         "msprt_first_significant_n": int(crossed["n"].iloc[0]) if len(crossed) else None,
         "mode": "sequential" if sequential else "fixed horizon",
+        "max_rated_per_arm": max_rated_per_arm,
+        "truncated_at_ts": truncated_at,
     }
 
     # 3. guardrails
@@ -261,7 +272,8 @@ def render_markdown(r: Readout) -> str:
               f"5. Always valid mSPRT (design effect applied): p = {p['msprt_p_final']:.4f}, confidence sequence "
               f"[{p['msprt_confidence_sequence'][0] * 100:+.2f}, {p['msprt_confidence_sequence'][1] * 100:+.2f}]"
               + (f"; first below 0.05 after {p['msprt_first_significant_n']} rated answers." if p["msprt_first_significant_n"] else "; never below 0.05."),
-              f"6. Analysis mode: {p['mode']}.",
+              f"6. Analysis mode: {p['mode']}" + (f", stopped at the maximum of {p['max_rated_per_arm']:,} rated answers per arm."
+                                                  if p.get("truncated_at_ts") else "."),
               "", "## Guardrails", ""]
     for k, v in r.guardrails.items():
         ci = f" (95% CI {v['ci'][0] * 100:+.1f}% to {v['ci'][1] * 100:+.1f}%)" if "ci" in v else ""

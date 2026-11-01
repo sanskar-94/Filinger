@@ -31,6 +31,8 @@ jobs:
           flab synth --out data/synthetic --companies 60
           flab local --index data/synthetic/index.parquet --prices data/synthetic/prices.parquet --lake data/lake
           flab features --lake data/lake
+      - name: Data quality gates
+        run: flab dq --lake data/lake --out artifacts/dq && cat artifacts/dq/dq.md >> "$GITHUB_STEP_SUMMARY"
       - name: Reaction model candidate
         run: flab train --permutations 0 --out artifacts/phase2
       - name: Extractor candidate

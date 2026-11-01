@@ -62,7 +62,16 @@ resources:
           python_wheel_task:
             package_name: filings_lab
             entry_point: flab
-            parameters: ["features", "--lake", "${var.lake_root}"]
+            parameters: ["spark-features", "--lake", "${var.lake_root}", "--facts", "${var.lake_root}/bronze/facts.parquet"]
+          libraries: [{whl: "${var.wheel}"}]
+        - task_key: quality
+          description: Data quality gates; a failure stops the run before any model is trained
+          depends_on: [{task_key: features}]
+          job_cluster_key: etl
+          python_wheel_task:
+            package_name: filings_lab
+            entry_point: flab
+            parameters: ["dq", "--lake", "${var.lake_root}", "--out", "${var.lake_root}/reports/dq"]
           libraries: [{whl: "${var.wheel}"}]
 
 targets:

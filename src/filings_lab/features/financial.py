@@ -49,8 +49,12 @@ def fundamentals_asof(facts: pd.DataFrame, events: pd.DataFrame, date_col: str =
     out["fin_accruals"] = (wide["net_income"] - wide["op_cash_flow"]) / a
     out["fin_rev_growth"] = wide["fin_rev_growth"]
     ev = events[["accession", "cik", date_col]].copy()
-    ev[date_col] = pd.to_datetime(ev[date_col])
+    # one resolution on both sides: Arrow (Spark) and parquet can hand over seconds or nanoseconds
+    ev[date_col] = pd.to_datetime(ev[date_col]).astype("datetime64[ns]")
+    ev["cik"] = ev["cik"].astype("int64")
     ev = ev.sort_values(date_col)
+    out["filed"] = pd.to_datetime(out["filed"]).astype("datetime64[ns]")
+    out["cik"] = out["cik"].astype("int64")
     out = out.sort_values("filed")
     merged = pd.merge_asof(
         ev, out, left_on=date_col, right_on="filed", by="cik", allow_exact_matches=False, direction="backward"
