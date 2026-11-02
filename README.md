@@ -50,12 +50,12 @@ flowchart LR
 
 | Phase | What is built | Where | Doc |
 |---|---|---|---|
-| 1 Data at scale | Rate limited EDGAR client, bulk and API index builders, HTML and inline XBRL cleaning, TOC aware section extraction, stable paragraph ids, acceptance time event alignment, market model CARs, PySpark job verified identical to the local runner, Databricks bundle, EMR steps, Terraform, DuckDB SQL | `pipeline/`, `edgar/`, `text/`, `prices/`, `infra/` | [phase1](docs/phases/phase1_data.md) |
-| 2 Classical baseline and statistics | Lexicon, change, rule and point in time XBRL features; purged walk forward LightGBM; DeLong, Newey West, block bootstrap, Diebold Mariano, permutation and Benjamini Hochberg tests; ablations and SHAP | `features/`, `modeling/`, `sql/` | [phase2](docs/phases/phase2_baseline.md) |
-| 3 Fine tune an LLM | Strict signal schema, evidence selection, frontier model teacher with structured outputs and batch labelling, TRL and PEFT LoRA or QLoRA trainer, offline smoke test, eval harness with grounding checks and a regression gate | `llm/`, `configs/` | [phase3](docs/phases/phase3_llm.md) |
-| 4 Serve it in production | FastAPI with circuit breaker and fallback, vLLM with multi LoRA, MLflow tracking and alias registry, drift (PSI, KS), Prometheus and Grafana, Kubernetes with HPA and KEDA, EKS Terraform, CI gate with GitOps promotion | `serving/`, `infra/k8s`, `infra/eks`, `.github/` | [phase4](docs/phases/phase4_serving.md) |
-| 5 Analyst agent and app | Tools for search, paragraphs, filings, prices, event returns and model signals; LLM tool loop with verified citations; offline mode; Next.js and TypeScript app | `agent/`, `web/` | [phase5](docs/phases/phase5_agent.md) |
-| 6 Experiment and dashboard | Sticky assignment, event log, power analysis, readout with clustered intervals, SRM check, mSPRT and guardrails; BI star schema, DAX and Tableau kits; published dashboard | `experiment/`, `dashboards/` | [phase6](docs/phases/phase6_experiment.md) |
+| 1 Data at scale | Rate limited EDGAR client, bulk and API index builders, price and XBRL ingestion commands, HTML and inline XBRL cleaning, TOC aware section extraction, stable paragraph ids, acceptance time event alignment with informational and tradable CARs, PySpark jobs for the lake and the features (both proven equal to the local build), 22 data quality gates with a leakage canary, Databricks bundle, EMR steps, Terraform, DuckDB SQL | `pipeline/`, `edgar/`, `text/`, `prices/`, `infra/` | [phase1](docs/phases/phase1_data.md) |
+| 2 Classical baseline and statistics | Lexicon, change, rule and point in time XBRL features; purged walk forward LightGBM with purged k fold tuning; DeLong, Newey West, bootstrap, Diebold Mariano, permutation and Benjamini Hochberg tests; calibration; a cost aware tradable backtest; ablations and SHAP | `features/`, `modeling/`, `sql/` | [phase2](docs/phases/phase2_baseline.md) |
+| 3 Fine tune an LLM | Strict signal schema, evidence selection, frontier model teacher with structured outputs and batch labelling, human review with Cohen's kappa, TRL and PEFT LoRA or QLoRA trainer, offline smoke test, eval harness with grounding checks and a regression gate | `llm/`, `configs/` | [phase3](docs/phases/phase3_llm.md) |
+| 4 Serve it in production | FastAPI with circuit breaker and fallback, vLLM with multi LoRA, MLflow tracking and alias registry, live and batch drift with retrain recommendations, Prometheus and Grafana, Kubernetes with HPA, KEDA and CronJobs, EKS Terraform, load test, CI gate with GitOps promotion | `serving/`, `infra/k8s`, `infra/eks`, `loadtest/`, `.github/` | [phase4](docs/phases/phase4_serving.md) |
+| 5 Analyst agent and app | Tools for search, paragraphs, filings, prices, event returns, live extraction and model signals; LLM tool loop with verified citations; offline mode; Next.js and TypeScript app with filing viewer, experiment page and review page | `agent/`, `web/` | [phase5](docs/phases/phase5_agent.md) |
+| 6 Experiment and dashboard | Sticky assignment with a model version per variant, event log, power analysis, readout with clustered intervals, SRM check, mSPRT with confidence sequences and a maximum sample, guardrails; BI star schema, DAX and Tableau kits; published dashboard | `experiment/`, `dashboards/` | [phase6](docs/phases/phase6_experiment.md) |
 
 Research and design decisions, with sources: [docs/RESEARCH.md](docs/RESEARCH.md).
 
@@ -65,41 +65,50 @@ Dashboards (A/B readout, reaction model and extraction model, built from `dashbo
 ## Quickstart (synthetic world, about five minutes)
 
 ```bash
-pip install -e ".[ml,serve,agent,dev]" tabulate duckdb
+make install
 ```
 
 ```bash
-flab synth --out data/synthetic --companies 60
-flab local --index data/synthetic/index.parquet --prices data/synthetic/prices.parquet --lake data/lake
-flab features && flab train --permutations 20
+make pipeline train llm register
 ```
 
 ```bash
-flab llm-dataset && flab llm-eval --systems rules && flab llm-features --system rules
-flab register --alias champion && flab serve
+make serve
 ```
 
 ```bash
-cd web && npm ci && FLAB_API_URL=http://localhost:8080 npm run dev
+make web
 ```
 
-```bash
-flab ab-plan && flab ab-simulate --users 3000 && flab ab-analyze && flab bi-export
-```
-
+`make e2e` runs the whole lab on a tiny world in about 20 seconds and checks every stage, `make ab` runs
+the A/B simulation and readout, `make drift` the drift report and `make dashboard-data` the BI export.
 `docker compose up --build` runs the API, the web app, MLflow, Prometheus and Grafana together.
 
 ## Running on real data
 
 ```bash
 export SEC_USER_AGENT="Your Org you@example.com"
+```
+
+```bash
 flab index --tickers universe.txt --start 2014-01-01 --end 2024-12-31 --out data/lake/bronze/index.parquet
+```
+
+```bash
 flab download --index data/lake/bronze/index.parquet --raw data/lake/bronze/raw
 ```
 
-Then run the Spark job on Databricks (`infra/databricks/databricks.yml`) or EMR (`infra/emr/run_pipeline.sh`)
-with a licensed daily price file. Set `ANTHROPIC_API_KEY` for teacher labelling and the online agent; train
-the adapter on a 24 GB GPU with `flab llm-train`.
+```bash
+flab prices --index data/lake/bronze/index.parquet --source csv --path vendor_prices/
+```
+
+```bash
+flab facts --index data/lake/bronze/index.parquet --bulk companyfacts.zip
+```
+
+Then run the Spark jobs on Databricks (`infra/databricks/databricks.yml`: download, transform, features with
+`flab spark-features`, quality gates) or EMR (`infra/emr/run_pipeline.sh`). Set `ANTHROPIC_API_KEY` for
+teacher labelling and the online agent; train the adapter on a 24 GB GPU with `flab llm-train`.
 
 ## Honest scope
 
@@ -117,8 +126,9 @@ ruff check src tests scripts
 cd web && npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-CI runs these on Python 3.11 to 3.13, plus the PySpark parity test on Java 17, the LoRA smoke test on CPU
-PyTorch and the model gate on every change to models, features or training code.
+CI runs these on Python 3.11 to 3.13, plus the PySpark parity tests on Java 17, the LoRA smoke test on CPU
+PyTorch, the end to end script, kubeconform on the rendered Kubernetes overlays, terraform validate, and the
+model gate (with the data quality gates) on every change to models, features or training code.
 
 ## Three stories from one system
 
@@ -144,4 +154,6 @@ models/            production and candidate model records (GitOps promotion)
 dashboards/        BI star schema exports, Power BI and Tableau kits
 sql/               DuckDB analysis queries over the lake
 docs/              research notes, one document per phase
+loadtest/          Locust profile of the analyst request mix
+Makefile           entry points; scripts/e2e.sh runs everything on a tiny world
 ```

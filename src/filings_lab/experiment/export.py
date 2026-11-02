@@ -62,11 +62,18 @@ def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: st
         q = pd.DataFrame({"quintile": q["pred_quintile"].astype(int), "events": q["count"],
                           "mean_car_bps": q["mean"] * 1e4, "se_bps": q["std"] / np.sqrt(q["count"]) * 1e4})
         paths.append(_write(q, out, "model_quintiles"))
+    for src, name in (("backtest_monthly.csv", "model_backtest"), ("backtest_cost_curve.csv", "model_cost_curve"),
+                      ("calibration.csv", "model_calibration")):
+        if (Path(phase2_dir) / src).exists():
+            t = pd.read_csv(Path(phase2_dir) / src)
+            if name == "model_backtest":
+                t = t.assign(gross_bps=t["gross"] * 1e4, net_bps=t["net"] * 1e4, cum_net_bps=t["cum_net"] * 1e4)
+            paths.append(_write(t, out, name))
     metrics_path = Path(phase2_dir) / "metrics.json"
     if metrics_path.exists():
         res = json.loads(metrics_path.read_text())["results"]
         labels = {"market_meta": "Market and filing type", "market_fundamentals": "Market and fundamentals",
-                  "text_only": "Filing text only", "all": "All features (LightGBM)", "logistic_all": "All features (logistic)",
+                  "text_only": "Filing text only", "all": "All features (LightGBM)", "all_tuned": "All features, tuned", "logistic_all": "All features (logistic)",
                   "llm_only": "LLM signals only", "all_plus_llm": "All plus LLM signals"}
         rows = [{"feature_set": k, "label": labels.get(k, k), "events": v["n"], "auc": v["auc"]["auc"],
                  "auc_low": v["auc"]["ci_low"], "auc_high": v["auc"]["ci_high"], "ic": v["ic"]["mean"], "ic_t": v["ic"]["t"],
@@ -76,6 +83,10 @@ def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: st
     # experiment
     exp = Experiment.load(experiment)
     df = EventLog(db).frame(exp.name)
+    readout = json.loads(Path(readout_path).read_text()) if readout_path and Path(readout_path).exists() else None
+    cut = (readout or {}).get("primary", {}).get("truncated_at_ts")
+    if cut is not None:  # the test stopped at its maximum sample: report exactly the data the decision used
+        df = df[df["ts"] <= cut]
     if not df.empty:
         df["date"] = pd.to_datetime(df["ts"], unit="s").dt.date.astype(str)
         seed = df["user_id"].str.extract(r"^sim-user-(\d+)-")[0]
@@ -94,8 +105,8 @@ def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: st
         daily["cum_rated"] = daily.groupby("variant")["rated"].cumsum()
         daily["cum_thumbs_up_rate"] = daily.groupby("variant")["thumbs_up"].cumsum() / daily["cum_rated"]
         paths.append(_write(daily, out, "agg_ab_daily"))
-    if readout_path and Path(readout_path).exists():
-        r = json.loads(Path(readout_path).read_text())
+    if readout is not None:
+        r = readout
         paths += _readout_tables(r, df, exp, out, Path(db))
         p = r["primary"]
         rows = [{"metric": "thumbs_up_rate_diff", "estimate": p["diff"], "ci_low": p["ci_clustered"][0],

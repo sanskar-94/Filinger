@@ -4,9 +4,10 @@
     "registry_uri": "models:/filings-reaction@champion",
     "feature_set": "all",
     "metrics": {
-      "auc": 0.5635,
-      "ic": 0.0822
-    }
+      "auc": 0.5693,
+      "ic": 0.08
+    },
+    "version": 2
   },
   "extractor": {
     "system": "rules",

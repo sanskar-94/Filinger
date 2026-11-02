@@ -42,7 +42,31 @@ once, politely, resumably; then let Spark use every core on files already in S3.
 2. Pre event features are invariant to anything that happens on or after day 0. `tests/test_events.py`
 3. XBRL facts are joined point in time on the `filed` date. `tests/test_edgar.py`
 4. The table of contents never wins section extraction; 10-Q Part I and Part II items are disambiguated. `tests/test_text.py`
-5. The Spark job and the single machine runner produce identical tables (same paragraph ids, same CARs to 1e-12, same labels). `tests/test_spark_parity.py`
+5. The Spark job and the single machine runner produce identical tables (same paragraph ids, same CARs to 1e-12, same labels), and the Spark feature build equals the pandas one column by column. `tests/test_spark_parity.py`
+6. Data quality gates pass before anything is trained (below). `tests/test_quality.py`
+
+## Real inputs beyond the filings
+
+| Command | Builds |
+|---|---|
+| `flab prices --index ... --source stooq` or `--source csv --path vendor/` | daily closes for every ticker in the index plus the market proxy, with a coverage report; refuses to continue without the market proxy |
+| `flab facts --index ...` or `--bulk companyfacts.zip` | XBRL fundamentals per company from the API or the nightly bulk archive |
+| `flab spark-features --lake s3://...` | the gold feature table in Spark (`groupBy(cik).applyInPandas` for text, `cogroup` for point in time fundamentals, native expressions for the rest) |
+
+The event study also records CAR[+1,+2], the part of the reaction a trader can capture by entering at the
+first close after the filing; the backtest in Phase 2 trades that, not CAR[0,+2].
+
+## Data quality gates (`flab dq`)
+
+Twenty two checks with explicit thresholds in one table (`pipeline/quality.py`): required fields and unique
+accession numbers in the index, acceptance timestamps that parse, section extraction rates per form, unique
+non blank paragraphs, one positive price per ticker and day, event coverage, finite and plausible CARs, no
+reaction dated before acceptance, label balance, one feature row per filing, no infinite values, null rates,
+and a leakage canary that fails when the lower 95% bound of any single feature's rank correlation with CAR
+exceeds 0.30 (a feature that predictive is a timing bug until proven otherwise). A failure exits non zero
+and stops the Databricks job and the model gate. All 22 pass on the synthetic lake; tests inject a
+look ahead reaction, an implausible CAR, duplicate prices and paragraphs, and a feature built from post event
+prices, and each is caught.
 
 ## Running it
 

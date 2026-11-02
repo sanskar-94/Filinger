@@ -16,7 +16,8 @@ Tools (strict JSON schemas, `tools.py`):
 | `list_filings(ticker, form, limit)` | a company's filings with their 3 day abnormal return |
 | `get_price_history(ticker, start, end)` | return, drawdown, volatility, weekly closes |
 | `get_event_return(accession)` | day 0 return and CAR[0,+2] for one filing |
-| `get_model_signal(accession)` | LLM extracted signals and the reaction model's probability with drivers |
+| `extract_signals(accession)` | runs the extraction model this session serves (its A/B variant's LoRA adapter on vLLM, rules offline) and returns signals with quotes resolved to paragraph ids |
+| `get_model_signal(accession)` | stored LLM signals and the reaction model's probability with drivers |
 
 Citation integrity: the tool box records every paragraph id it returns during a request. The validator
 accepts a citation only if its id is in that set. If the model cites an id it was never shown, the agent
@@ -51,7 +52,19 @@ The service also falls back to it if the API errors.
 4. Checks: `npm run lint`, `npm run typecheck`, `npm test` (vitest: citation parsing and formatting),
    `npm run build`; all run in CI.
 
+4. Filing viewer: every citation opens the filing at the cited paragraph, highlighted, with section
+   navigation and a link to the original on EDGAR.
+5. Experiment page: the live A/B readout (decision, lift with clustered and always valid intervals, arms,
+   traffic split and guardrail checks).
+6. Review page: human review of teacher labels with agreement and Cohen's kappa (Phase 3).
+
 ![Company page](../img/company.png)
+
+![Filing viewer](../img/filing.png)
+
+![Experiment page](../img/experiment.png)
+
+![Review page](../img/review.png)
 
 Verified end to end in this environment: the API and the Next.js server ran together and a headless browser
 asked a question, opened a citation, recorded feedback and loaded a company page with no page errors; the

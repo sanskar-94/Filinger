@@ -50,33 +50,33 @@ the planted truth.
 
 ## Result
 
-Two periods of 14 days, 6,000 simulated analysts, 24,089 answered questions, 10,801 rated answers.
-Planted lift: +4.2 points in period 1, +3.9 in period 2.
+Three periods of 14 days, 9,000 simulated analysts; the test stopped when both arms reached the configured
+maximum of 8,000 rated answers, and everything after that moment is excluded from the readout. Planted lift:
++4.2, +3.9 and +3.4 points in the three periods.
 
-| | Period 1 (planned sample) | After the extension |
-|---|---|---|
-| Thumbs up rate A / B | 60.2% / 62.3% | 60.1% / 62.7% |
-| Lift, user clustered 95% CI | +2.09 points [-0.75, +4.92] | +2.60 points [+0.64, +4.57] |
-| Fixed sample p (clustered) | 0.149 | 0.009, but not valid after peeking |
-| Always valid p, confidence sequence | 0.207, [-1.70, +6.42] | 0.155, [-0.41, +4.53] |
-| Design effect | 1.18 | 1.15 |
-| Sample ratio check | p = 0.91 | p = 0.96 |
-| p95 latency, B against A | -3.0% [-4.4%, -0.7%] | -3.1% [-3.8%, -2.5%] |
-| Decision | continue | continue |
+| | After period 1 (planned sample) | After period 2 | Final, at the maximum sample |
+|---|---|---|---|
+| Thumbs up rate A / B | 60.2% / 62.3% | 60.1% / 62.7% | 59.8% / 62.5% |
+| Lift, user clustered 95% CI | +2.09 [-0.75, +4.92] | +2.60 [+0.64, +4.57] | +2.64 [+1.03, +4.25] |
+| Fixed sample p (clustered) | 0.149 | 0.009, not valid after peeking | 0.001, not valid after peeking |
+| Always valid p | 0.207 | 0.155 | 0.013 |
+| Always valid confidence sequence | [-1.70, +6.42] | [-0.41, +4.53] | [+0.39, +4.52] |
+| Decision | continue | continue | ship variant B |
 
 How to read it:
 1. At the planned sample the interval covered both zero and the true effect. With 80% power at the planned
-   MDE, missing a real effect one time in five is expected, and the observed lift (+2.1) happened to land
-   low.
-2. Because the team looked at the result and chose to extend, the fixed sample test is no longer valid:
-   its p = 0.009 after the extension is exactly the optional stopping error the always valid test exists to
-   prevent. The always valid confidence sequence still includes zero, so the readout says keep collecting,
-   up to the configured maximum of 8,000 rated answers per arm.
-3. The guardrails are clean and B is reliably about 3% faster at p95, because plain ranking skips the
-   diversification step.
+   MDE, missing a real effect one time in five is expected.
+2. After the first look, only the always valid test can decide. After period 2 the fixed sample test already
+   said "significant" (p = 0.009), which is exactly the optional stopping error the sequential test exists to
+   prevent; the confidence sequence still included zero, so the readout said keep collecting.
+3. The always valid p first fell below 0.05 after 11,664 rated answers, during period 3, and at the stopping
+   point the confidence sequence [+0.39, +4.52] excludes zero and contains the planted lift (about 3.9).
+4. Guardrails are clean: citation validity unchanged, and B is reliably about 3.8% faster at p95 because
+   plain ranking skips the diversification step. Sample ratio check p = 0.83.
 
-Artifacts: `artifacts/phase6/period1/readout.md`, `artifacts/phase6/readout.md`, and the BI tables in
-`dashboards/data/`.
+Artifacts: `artifacts/phase6/period1/readout.md`, `artifacts/phase6/period2/readout.md`,
+`artifacts/phase6/readout.md`, and the BI tables in `dashboards/data/`, which use exactly the data up to the
+stopping point.
 
 ## Dashboard
 
@@ -85,4 +85,4 @@ Tableau (`dashboards/tableau/`, calculated fields included). Publishing to a Pow
 needs that account; the same dashboard is published as a private web dashboard built from the same
 exported files, with an A/B test tab (lift, every metric's interval against zero, cumulative rate by arm,
 the sequential evidence path, the arms table) and a reaction model tab (AUC by feature set, monthly IC,
-abnormal return by prediction quintile).
+abnormal return by prediction quintile, the tradable backtest and its cost sensitivity).

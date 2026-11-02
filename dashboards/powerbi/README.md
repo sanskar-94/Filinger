@@ -29,6 +29,9 @@ answer as independent and are shown for orientation only.
 | Line | month, `long_short` |
 | Matrix | sector by form, Mean CAR (bps), count of filings |
 
+Add a line of `model_backtest[cum_net_bps]` by month and a table of `model_cost_curve` (cost per side,
+net spread, Sharpe) to show how much of the signal survives trading costs.
+
 ## Page 3: Filings explorer
 
 Slicers for ticker, form and date; a table of filings with `car`, `pred` and a link column built from

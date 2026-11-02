@@ -47,6 +47,35 @@ PSI against training quantile bins for the twelve most important features and fo
 a KS test for numeric features, and PSI on category shares for extraction outputs (for example the share of
 "guidance lowered"). Alerts fire at PSI above 0.25 for an hour.
 
+## Batch drift and retraining (`serving/drift_report.py`, `infra/k8s/base/cronjobs.yaml`)
+
+`flab drift-report` scores the most recent months of filings with the production model and compares each
+monitored feature and the prediction with the reference distributions stored in the model artefact. It
+recommends retraining when a feature's PSI exceeds 0.25 or the prediction's exceeds 0.2, and can push the
+numbers to a Prometheus Pushgateway. A nightly CronJob runs it; a weekly CronJob runs the quality gates,
+retrains, and registers a challenger (promotion to champion stays a reviewed pull request).
+
+It has already earned its keep twice on the synthetic data. It flagged log assets (PSI 1.5) because company
+size trends upward, which led to a stationary within month size percentile. On the latest run it flags the
+year over year change in risk factor length (PSI 0.30): risk sections stop growing once companies reach the
+generator's cap, the same kind of drift real 10-Ks show as risk sections lengthen over a decade.
+
+## Load test (`loadtest/locustfile.py`)
+
+The analyst request mix (scores, filing lookups, extraction, agent questions, health checks) against two
+uvicorn workers on the sandbox CPU, 40 concurrent users for 60 seconds:
+
+| Endpoint | Requests | Failures | Median | p95 | p99 |
+|---|---|---|---|---|---|
+| `POST /v1/score` | 1,543 | 0 | 21 ms | 61 ms | 95 ms |
+| `GET /v1/filings/{accession}` | 940 | 0 | 21 ms | 54 ms | 92 ms |
+| `POST /v1/extract` (rules fallback) | 617 | 0 | 5 ms | 30 ms | 47 ms |
+| `POST /v1/agent/ask` (offline agent) | 304 | 0 | 42 ms | 140 ms | 180 ms |
+| All | 3,705 | 0 | 19 ms | 61 ms | 110 ms |
+
+About 63 requests per second without errors. With vLLM in the loop the extraction path is GPU bound and
+scales on queue depth through KEDA, which is why its autoscaling does not use CPU.
+
 ## Kubernetes (`infra/k8s`, `infra/eks`)
 
 1. API: non root, read only root filesystem, init container syncs the registry and gold tables from S3 via
@@ -62,8 +91,8 @@ a KS test for numeric features, and PSI on category shares for extraction output
 
 | Workflow | What it does |
 |---|---|
-| `ci.yml` | ruff, tests on Python 3.11 to 3.13, Spark parity test with Java 17, LoRA smoke test on CPU torch, web lint, typecheck, tests and build |
-| `model-gate.yml` | on changes to models, configs, features or training code: rebuilds the frozen evaluation world, retrains the reaction model, evaluates the candidate extractor on the gold set (or a staging vLLM endpoint when `CANDIDATE_LLM_URL` is set) and runs `flab gate` against `models/production.json`; fails the PR if anything gated is worse |
+| `ci.yml` | ruff, tests on Python 3.11 to 3.13, Spark parity tests with Java 17, LoRA smoke test on CPU torch, web lint, typecheck, tests and build, the end to end script, kubeconform on both rendered overlays, terraform fmt and validate |
+| `model-gate.yml` | on changes to models, configs, features or training code: rebuilds the frozen evaluation world, runs the data quality gates, retrains the reaction model, evaluates the candidate extractor on the gold set (or a staging vLLM endpoint when `CANDIDATE_LLM_URL` is set) and runs `flab gate` against `models/production.json`; fails the PR if anything gated is worse |
 | `deploy.yml` | on main: builds and pushes both images tagged with the commit SHA, then a protected `production` environment applies the prod overlay, waits for rollouts and smoke tests `/readyz` |
 
 Promotion is GitOps: a pull request edits `models/production.json`, and the gate must pass before merge.

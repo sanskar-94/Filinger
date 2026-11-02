@@ -50,6 +50,14 @@ Cost estimate for the teacher, stated as assumptions: about 3,500 input and 1,00
 $0.017 through batches, roughly $50 for 3,000 training labels. `flab llm-label` prints the exact figure
 from the API's usage fields.
 
+## Human review of teacher labels (`llm/review.py`, app page `/review`)
+
+A reviewer sees the filing excerpt next to the teacher's proposed labels and accepts, corrects or skips.
+Decisions are appended to `reviewed.jsonl` (resumable, never overwritten), and the page shows per field
+agreement with the teacher and Cohen's kappa (checked against sklearn), which is the evidence for how far the
+teacher can be trusted per field. `flab llm-gold` turns the reviewed items into the gold set, human labels
+replacing the teacher's.
+
 ## Training (`filings_lab/llm/train_lora.py`)
 
 TRL `SFTTrainer` with a PEFT `LoraConfig`: rank 16, alpha 32, dropout 0.05, all linear projections,
