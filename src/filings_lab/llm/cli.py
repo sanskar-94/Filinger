@@ -172,7 +172,24 @@ def _reg_features(p):
     p.set_defaults(fn=cmd_features)
 
 
+def cmd_gold(a):
+    from .review import ReviewStore
+
+    rs = ReviewStore(a.queue, a.reviewed)
+    gold = rs.gold()
+    Path(a.out).write_text("\n".join(json.dumps(g) for g in gold) + "\n")
+    print(json.dumps({"gold": len(gold), **rs.stats()}, indent=2, default=str))
+
+
+def _reg_gold(p):
+    p.add_argument("--queue", default="data/llm_dataset/gold.jsonl")
+    p.add_argument("--reviewed", default="data/llm_dataset/reviewed.jsonl")
+    p.add_argument("--out", default="data/llm_dataset/gold_reviewed.jsonl")
+    p.set_defaults(fn=cmd_gold)
+
+
 COMMANDS = {
+    "llm-gold": (_reg_gold, "build the gold set from human reviewed labels"),
     "llm-dataset": (_reg_dataset, "build the fine tuning dataset and gold set"),
     "llm-label": (_reg_label, "label filings with the frontier teacher (Claude)"),
     "llm-train": (_reg_train, "LoRA fine tune a small open model"),

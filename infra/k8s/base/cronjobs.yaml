@@ -1,0 +1,70 @@
+# Nightly drift report on recent filings, pushed to the Prometheus Pushgateway so the FeatureDriftHigh alert
+# covers the data as well as live traffic; weekly retraining that registers a challenger. Promotion to
+# champion stays a reviewed pull request through the model gate.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: drift-report
+spec:
+  schedule: "17 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: filings-lab
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+          initContainers:
+            - name: sync
+              image: amazon/aws-cli:2.27.0
+              command: ["sh", "-c", "aws s3 sync $MODEL_S3_PREFIX /data/registry && aws s3 sync $LAKE_S3_PREFIX /data/lake/gold"]
+              envFrom: [{configMapRef: {name: filings-api}}]
+              volumeMounts: [{name: data, mountPath: /data}]
+          containers:
+            - name: drift
+              image: filings-api:latest
+              command: ["flab", "drift-report", "--lake", "/data/lake", "--out", "/data/reports/drift",
+                        "--pushgateway", "prometheus-pushgateway.monitoring.svc:9091"]
+              envFrom: [{configMapRef: {name: filings-api}}]
+              resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {memory: 2Gi}}
+              volumeMounts: [{name: data, mountPath: /data}]
+          volumes: [{name: data, emptyDir: {}}]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: retrain-challenger
+spec:
+  schedule: "43 7 * * 1"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: filings-lab-trainer  # write access to the registry prefix only
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+          initContainers:
+            - name: sync
+              image: amazon/aws-cli:2.27.0
+              command: ["sh", "-c", "aws s3 sync $LAKE_S3_PREFIX /data/lake/gold && aws s3 sync $MODEL_S3_PREFIX /data/registry"]
+              envFrom: [{configMapRef: {name: filings-api}}]
+              volumeMounts: [{name: data, mountPath: /data}]
+          containers:
+            - name: retrain
+              image: filings-api:latest
+              command: ["sh", "-c", "flab dq --lake /data/lake && flab train --lake /data/lake --out /data/reports/phase2 --permutations 20 && flab register --lake /data/lake --metrics /data/reports/phase2/metrics.json --alias challenger"]
+              envFrom: [{configMapRef: {name: filings-api}}]
+              resources: {requests: {cpu: "2", memory: 4Gi}, limits: {memory: 8Gi}}
+              volumeMounts: [{name: data, mountPath: /data}]
+            - name: upload
+              image: amazon/aws-cli:2.27.0
+              command: ["sh", "-c", "while [ ! -f /data/registry/filings-reaction/aliases.json ]; do sleep 30; done; aws s3 sync /data/registry $MODEL_S3_PREFIX"]
+              envFrom: [{configMapRef: {name: filings-api}}]
+              volumeMounts: [{name: data, mountPath: /data}]
+          volumes: [{name: data, emptyDir: {}}]

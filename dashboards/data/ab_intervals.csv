@@ -1,5 +1,5 @@
 key,metric,method,estimate_pct,low_pct,high_pct
-thumbs_up_lift,Thumbs up rate,"user clustered delta, 95%",4.330849230186584,0.9925688638128726,7.669129596560295
-thumbs_up_lift_always_valid,"Thumbs up rate, always valid","mSPRT confidence sequence, 95%",4.330849230186584,-0.684802285018845,7.529949564400209
-latency_p95_faster,"p95 latency, faster is right","user cluster bootstrap, 95%",3.1237835520001034,2.4896047955861302,3.7621793606943834
+thumbs_up_lift,Thumbs up rate,"user clustered delta, 95%",4.417221879498268,1.6715046420498174,7.162939116946718
+thumbs_up_lift_always_valid,"Thumbs up rate, always valid","mSPRT confidence sequence, 95%",4.417221879498268,0.6465169792799301,7.558438923167085
+latency_p95_faster,"p95 latency, faster is right","user cluster bootstrap, 95%",3.8141999546613015,2.9229920205936524,4.745053239123189
 citation_validity,Citation validity,difference in mean,0.0,0.0,0.0

@@ -192,3 +192,57 @@ def test_event_log_migrates_old_schema(tmp_path):
     EventLog(db)
     with sqlite3.connect(db) as c:
         assert "model_version" in {r[1] for r in c.execute("PRAGMA table_info(exposures)")}
+
+
+def test_filing_viewer_readout_and_review_routes(store, tmp_path, monkeypatch):
+    import json as _json
+
+    from fastapi.testclient import TestClient
+
+    from filings_lab.agent.service import AgentService
+    from filings_lab.serving.app import ServiceConfig, create_app
+
+    acc = store.paragraphs["accession"].iloc[0]
+    queue = tmp_path / "gold.jsonl"
+    label = {"guidance_direction": "raised", "management_tone": "positive", "liquidity_concern": False,
+             "litigation_risk": False, "key_quotes": [], "summary": "s"}
+    queue.write_text("\n".join(_json.dumps({"accession": a, "form": "8-K", "company": "C", "paragraphs": [{"section": "x", "text": "t"}],
+                                            "label": label}) for a in ("a1", "a2", "a3")) + "\n")
+    monkeypatch.setenv("FLAB_REVIEW_QUEUE", str(queue))
+    monkeypatch.setenv("FLAB_REVIEWED", str(tmp_path / "reviewed.jsonl"))
+    exp = Experiment("x", "s", {"A": {"weight": 0.5}, "B": {"weight": 0.5}})
+    svc = AgentService(store, exp, EventLog(tmp_path / "e.db"), mode="offline")
+    c = TestClient(create_app(ServiceConfig(lake=str(tmp_path / "nolake")), model=None, agent_service=svc))
+
+    doc = c.get(f"/v1/filings/{acc}/paragraphs").json()
+    ids = [p["paragraph_id"] for s in doc["sections"] for p in s["paragraphs"]]
+    assert doc["url"].startswith("https://www.sec.gov/") and len(ids) == len(set(ids)) > 0
+    assert c.get("/v1/filings/nope/paragraphs").status_code == 404
+
+    assert c.get("/v1/experiments/current/readout").status_code == 409  # nothing rated yet
+    t = store.index["ticker"].iloc[0]
+    for i in range(160):
+        out = c.post("/v1/agent/ask", json={"question": "guidance outlook", "ticker": t, "user_id": f"u{i}"}).json()
+        c.post("/v1/feedback", json={"request_id": out["request_id"], "rating": 1 if i % 3 else -1})
+    ro = c.get("/v1/experiments/current/readout").json()
+    assert ro["decision"] and set(ro["arms"]) == {"A", "B"}
+
+    item = c.get("/v1/review/next").json()
+    assert item["accession"] == "a1" and item["proposed"]["guidance_direction"] == "raised"
+    c.post("/v1/review", json={"accession": "a1", "action": "accept"})
+    c.post("/v1/review", json={"accession": "a2", "action": "correct", "label": {"guidance_direction": "lowered"}})
+    assert c.post("/v1/review", json={"accession": "a3", "action": "correct", "label": {"management_tone": "upbeat"}}).status_code == 422
+    stats = c.get("/v1/review/stats").json()
+    assert stats["reviewed"] == 2 and stats["corrected"] == 1
+    assert stats["fields"]["guidance_direction"]["agreement"] == 0.5
+    assert c.get("/v1/review/next").json()["accession"] == "a3"
+
+
+def test_cohen_kappa_matches_sklearn():
+    from sklearn.metrics import cohen_kappa_score
+
+    from filings_lab.llm.review import cohen_kappa
+
+    a = ["raised", "none", "none", "lowered", "none", "raised", "maintained", "none"]
+    b = ["raised", "none", "maintained", "lowered", "none", "none", "maintained", "none"]
+    assert cohen_kappa(a, b) == pytest.approx(cohen_kappa_score(a, b))

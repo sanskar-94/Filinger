@@ -38,9 +38,12 @@ export function SourcePanel({ citations, activeId }: { citations: Citation[]; ac
             {para.company} ({para.ticker}) · {para.form} filed {para.date_filed} · {para.section}
           </div>
           <div className="quote">{para.text}</div>
-          <a href={para.url} target="_blank" rel="noreferrer">
-            Open the filing on EDGAR
-          </a>
+          <div className="row">
+            <a href={`/filings/${para.accession}?p=${para.paragraph_id}#p-${para.paragraph_id}`}>Read it in the filing</a>
+            <a href={para.url} target="_blank" rel="noreferrer">
+              Original on EDGAR
+            </a>
+          </div>
         </div>
       ) : error ? (
         <p className="error">{error}</p>

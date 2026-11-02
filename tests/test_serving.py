@@ -127,3 +127,20 @@ def test_gate_cli_exit_codes(tmp_path):
     assert run("good.json").returncode == 0
     out = run("bad.json")
     assert out.returncode == 1 and "extraction_score" in out.stdout
+
+
+def test_batch_drift_report(model, features):
+    from filings_lab.serving.drift_report import drift_report, render
+
+    since = pd.to_datetime(features["event_date"]).max() - pd.DateOffset(months=24)
+    rep = drift_report(model, features, since)
+    assert rep["filings"] > 0 and "prediction" in set(rep["table"]["feature"])
+    stationary = rep["table"][rep["table"]["feature"].isin(["ret_5_1", "vol_60_1", "mom_250_30", "fin_size_rank"])]
+    assert (stationary["psi"] < 0.25).all(), stationary
+    shifted = features.copy()
+    recent = pd.to_datetime(shifted["event_date"]) >= since
+    top = rep["table"][rep["table"]["feature"] != "prediction"]["feature"].iloc[0]
+    shifted.loc[recent, top] = shifted.loc[recent, top] + 5 * shifted[top].std()
+    rep2 = drift_report(model, shifted, since)
+    assert rep2["retrain_recommended"] and top in rep2["breached"]
+    assert "Retraining recommended" in render(rep2)

@@ -30,3 +30,17 @@ describe("formatPct", () => {
     expect(formatPct(null)).toBe("n/a");
   });
 });
+
+describe("sectionLabel and axisPct", () => {
+  it("names known sections and humanises unknown ones", async () => {
+    const { sectionLabel } = await import("../citations");
+    expect(sectionLabel("mdna")).toBe("Management's discussion and analysis");
+    expect(sectionLabel("custom_part")).toBe("custom part");
+  });
+  it("maps values onto an axis and clamps", async () => {
+    const { axisPct } = await import("../citations");
+    expect(axisPct(0, -5, 5)).toBe(50);
+    expect(axisPct(10, -5, 5)).toBe(100);
+    expect(axisPct(1, 1, 1)).toBe(50);
+  });
+});

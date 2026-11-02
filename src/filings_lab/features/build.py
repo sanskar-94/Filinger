@@ -89,9 +89,24 @@ def assemble(events: pd.DataFrame, meta: pd.DataFrame, text: pd.DataFrame, facts
     df["month"] = pd.to_datetime(df["event_date"]).dt.month.astype(np.int8)
     if facts is not None and not facts.empty:
         df = df.merge(fundamentals_asof(facts, df[["accession", "cik", "date_filed"]]), on="accession", how="left")
+        df = size_rank(df)
     df["t1"] = pd.to_datetime(df["event_date"]) + pd.offsets.BDay(2)  # label end, used for purging
     df["year"] = pd.to_datetime(df["event_date"]).dt.year
     return df.drop(columns=["items"]).sort_values("event_date").reset_index(drop=True)
+
+
+def size_rank(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace log assets, which trends upward as companies grow (the drift report flags it), with the
+    company's size percentile among filings in the same month: (rank - 1) / (n - 1), the definition Spark's
+    percent_rank uses, computed over non missing values only."""
+    if "fin_log_assets" not in df:
+        return df
+    month = pd.to_datetime(df["event_date"]).dt.to_period("M")
+    x = df["fin_log_assets"]
+    rank = x.groupby(month).rank(method="min")
+    n = x.groupby(month).transform("count")
+    df["fin_size_rank"] = ((rank - 1) / (n - 1)).where(n > 1, 0.0).where(x.notna())
+    return df.drop(columns=["fin_log_assets"])
 
 
 def feature_groups(columns) -> dict[str, list[str]]:

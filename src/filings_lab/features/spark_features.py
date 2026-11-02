@@ -59,8 +59,15 @@ def build_features_spark(spark, lake: str, facts_path: str | None = None):
     meta = index_df.select("accession", F.to_timestamp("date_filed").alias("date_filed"), F.coalesce("items", F.lit("")).alias("items"))
     df = events.join(meta, "accession", "left").join(text, "accession", "left")
     if facts_path:
+        from pyspark.sql import Window
+
         facts = spark.read.parquet(facts_path)
         df = df.join(fundamentals_spark(spark, events, index_df, facts), "accession", "left")
+        # size percentile within the month over non missing values (same definition as features.build.size_rank)
+        w = Window.partitionBy(F.date_trunc("month", "event_date")).orderBy("fin_log_assets")
+        ranks = (df.filter(F.col("fin_log_assets").isNotNull())
+                   .select("accession", F.percent_rank().over(w).alias("fin_size_rank")))
+        df = df.join(ranks, "accession", "left").drop("fin_log_assets")
     for it in EIGHTK_ITEMS:
         df = df.withColumn(f"item_{it.replace('.', '_')}", F.col("items").contains(it).cast("tinyint"))
     base_form = F.regexp_replace("form", "/A", "")

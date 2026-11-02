@@ -78,6 +78,36 @@ def cmd_gate(a):
     sys.exit(1 if failures else 0)
 
 
+def cmd_drift(a):
+    import pandas as pd
+
+    from .drift_report import drift_report as build
+    from .drift_report import push, render, save
+    from .model import ReactionModel
+    from .registry import get_registry
+
+    model = ReactionModel.load(get_registry().resolve(a.model_uri))
+    feats = pd.read_parquet(f"{a.lake.rstrip('/')}/gold/features")
+    since = pd.to_datetime(feats["event_date"]).max() - pd.DateOffset(months=a.months)
+    rep = build(model, feats, since)
+    save(rep, a.out)
+    print(render(rep))
+    if a.pushgateway:
+        push(rep, a.pushgateway)
+    if a.fail_on_drift and rep["retrain_recommended"]:
+        sys.exit(2)
+
+
+def _reg_drift(p):
+    p.add_argument("--model-uri", default="models:/filings-reaction@champion")
+    p.add_argument("--lake", default="data/lake")
+    p.add_argument("--months", type=int, default=12, help="compare the most recent N months of filings")
+    p.add_argument("--out", default="artifacts/drift")
+    p.add_argument("--pushgateway", help="host:port of a Prometheus Pushgateway")
+    p.add_argument("--fail-on-drift", action="store_true", help="exit 2 when retraining is recommended")
+    p.set_defaults(fn=cmd_drift)
+
+
 def _reg_register(p):
     p.add_argument("--lake", default="data/lake")
     p.add_argument("--metrics", default="artifacts/phase2/metrics.json")
@@ -111,6 +141,7 @@ def _reg_gate(p):
 
 
 COMMANDS = {
+    "drift-report": (_reg_drift, "compare recent filings with the training reference and recommend retraining"),
     "register": (_reg_register, "fit the final reaction model and register it"),
     "promote": (_reg_promote, "point a registry alias (champion) at a version"),
     "serve": (_reg_serve, "run the FastAPI service"),
