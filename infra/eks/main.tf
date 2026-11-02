@@ -107,7 +107,7 @@ module "serving_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.44"
 
-  role_name = "filings-lab-serving"
+  role_name        = "filings-lab-serving"
   role_policy_arns = { read = aws_iam_policy.serving_read.arn }
   oidc_providers = {
     main = {

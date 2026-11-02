@@ -5,7 +5,7 @@ SYN ?= data/synthetic
 .PHONY: install synth pipeline features dq train llm register serve web test lint e2e ab dashboard-data drift loadtest spark-test
 
 install:
-	pip install -e ".[ml,serve,agent,dev]" tabulate duckdb
+	pip install -e ".[ml,serve,agent,dev]"
 	cd web && npm ci
 
 synth:
