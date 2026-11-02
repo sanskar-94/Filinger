@@ -74,9 +74,19 @@ def user_message(inp: ExtractionInput) -> str:
     )
 
 
-def chat_messages(inp: ExtractionInput, include_schema: bool = True) -> list[dict]:
+COMPACT_SYSTEM = ("Extract filing signals as JSON with guidance_direction, management_tone, liquidity_concern, "
+                  "litigation_risk, key_quotes and summary.")
+
+
+def chat_messages(inp: ExtractionInput, include_schema: bool = True, style: str = "full") -> list[dict]:
     """OpenAI style chat messages, used for fine tuning data and for vLLM / local inference.
-    Small models benefit from seeing the schema; the frontier path enforces it with structured outputs."""
+
+    ``full``: the definitions and the JSON schema, for models that have not been trained on the task.
+    ``compact``: a one line instruction for a model fine tuned on the task; it has learned the schema and the
+    definitions, so repeating them only costs context and latency.
+    """
+    if style == "compact":
+        return [{"role": "system", "content": COMPACT_SYSTEM}, {"role": "user", "content": inp.numbered()}]
     system = SYSTEM_PROMPT
     if include_schema:
         system += "\n\nJSON schema:\n" + json.dumps(json_schema(), separators=(",", ":"))

@@ -87,10 +87,10 @@ def stratified(accs: list[str], labels: dict[str, dict], common_per_rare: float 
     return list(keep)
 
 
-def sft_record(inp: ExtractionInput, label: dict) -> dict:
+def sft_record(inp: ExtractionInput, label: dict, style: str = "full") -> dict:
     """TRL conversational prompt completion format: loss is computed on the completion only."""
     return {
-        "prompt": chat_messages(inp),
+        "prompt": chat_messages(inp, style=style),
         "completion": [{"role": "assistant", "content": json.dumps(label, separators=(",", ":"))}],
         "accession": inp.accession,
         "form": inp.form,
@@ -98,7 +98,7 @@ def sft_record(inp: ExtractionInput, label: dict) -> dict:
 
 
 def write_dataset(inputs: dict[str, ExtractionInput], labels: dict[str, dict], splits: pd.Series, out_dir: str | Path,
-                  max_train: int | None = None, seed: int = 0) -> dict:
+                  max_train: int | None = None, seed: int = 0, style: str = "full") -> dict:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     stats = {}
@@ -108,7 +108,7 @@ def write_dataset(inputs: dict[str, ExtractionInput], labels: dict[str, dict], s
             accs = stratified(accs, labels, seed=seed)[: max_train or None]
         with open(out / f"{name}.jsonl", "w") as fh:
             for a in accs:
-                fh.write(json.dumps(sft_record(inputs[a], labels[a])) + "\n")
+                fh.write(json.dumps(sft_record(inputs[a], labels[a], style)) + "\n")
         stats[name] = len(accs)
         if name == "test":  # the gold set for the eval harness: inputs and labels, no prompt formatting
             gold = [{"accession": a, "form": inputs[a].form, "company": inputs[a].company,

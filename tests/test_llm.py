@@ -66,6 +66,26 @@ def test_rule_extractor_finds_guidance_with_grounded_quote():
     assert t["n_grounded"].iloc[0] == t["n_quotes"].iloc[0] >= 1
 
 
+def test_run_system_batches_local_models_and_keeps_order():
+    from filings_lab.llm.eval_harness import run_system
+
+    class Batched(RuleExtractor):
+        def __init__(self):
+            super().__init__()
+            self.batches = []
+
+        def extract_many(self, inputs, batch_size=16):
+            self.batches.append(batch_size)
+            return [self.extract(x) for x in inputs]
+
+    gold = [(INP, LABEL), (ExtractionInput("0000000002-24-000002", "8-K", "Beta", INP.paragraphs), LABEL)]
+    ex = Batched()
+    assert [r.accession for r in run_system(ex, gold, batch_size=8)] == [g[0].accession for g in gold]
+    assert ex.batches == [8]
+    run_system(ex, gold)  # default stays one request at a time, which is what serving latency means
+    assert ex.batches == [8]
+
+
 def test_macro_f1_known_values():
     g = np.array(["a", "a", "b", "b"], dtype=object)
     assert macro_f1(g, g.copy(), ["a", "b"]) == 1.0
@@ -186,3 +206,31 @@ def test_dataset_splits_and_gold(small_world, small_lake, tmp_path):
     assert len(gold) == stats["test"]
     s = summarize(item_table([RuleExtractor().extract(i) for i, _ in gold], gold))
     assert s["schema_valid_rate"] == 1.0 and 0 <= s["extraction_score"] <= 1
+
+
+def test_register_adapter_with_eval_scores(tmp_path, monkeypatch):
+    from filings_lab.llm.cli import cmd_register
+    from filings_lab.serving.registry import FileRegistry
+
+    train = tmp_path / "lora" / "tiny-champion"
+    (train / "adapter").mkdir(parents=True)
+    (train / "adapter" / "adapter_config.json").write_text(json.dumps({"base_model_name_or_path": "artifacts/tiny-base"}))
+    (train / "train_metrics.json").write_text(json.dumps({"train_loss": 2.0, "final_eval_loss": 1.43, "run_id": "abc"}))
+    (train / "train_config.json").write_text(json.dumps({"base_model": "artifacts/tiny-base", "lora_r": 16}))
+    ev = tmp_path / "eval.json"
+    ev.write_text(json.dumps({"summary": {"tiny-lora-champion": {"extraction_score": 0.71, "schema_valid_rate": 0.98}}}))
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.setenv("FLAB_REGISTRY", str(tmp_path / "registry"))
+    cmd_register(SimpleNamespace(adapter=str(train / "adapter"), name="filings-extractor", alias="champion", eval=str(ev),
+                                 system="tiny-lora-champion", run_id=None, prompt_style="compact",
+                                 tag=["gate=failed"]))
+    reg = FileRegistry(tmp_path / "registry")
+    path = reg.resolve("models:/filings-extractor@champion")
+    assert (path / "adapter_config.json").exists()
+    meta = reg.metadata("filings-extractor", 1)
+    assert meta["kind"] == "adapter" and meta["metrics"]["extraction_score"] == 0.71
+    assert meta["metrics"]["val_loss"] == 1.43 and meta["tags"]["lora_r"] == "16"
+    assert meta["tags"]["gate"] == "failed"
+    with pytest.raises(SystemExit):
+        cmd_register(SimpleNamespace(adapter=str(train / "adapter"), name="filings-extractor", alias=None, eval=str(ev),
+                                     system="missing", run_id=None, prompt_style="compact", tag=None))

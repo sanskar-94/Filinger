@@ -23,11 +23,6 @@ def cmd_register(a):
         build_artifact(feats, tmp, a.feature_set, metrics={"summary": summary, "rounds": res.get("rounds", [300])})
         reg = get_registry()
         version = reg.register(a.name, tmp, metrics=summary, tags={"feature_set": a.feature_set})
-    meta_path = reg.resolve(f"models:/{a.name}/{version}") / "meta.json"
-    if meta_path.exists():
-        meta = json.loads(meta_path.read_text())
-        meta["version"] = version
-        meta_path.write_text(json.dumps(meta, indent=2))
     if a.alias:
         reg.set_alias(a.name, a.alias, version)
     print(f"registered {a.name} v{version}" + (f" as @{a.alias}" if a.alias else ""), json.dumps(summary))
@@ -55,11 +50,23 @@ def cmd_gate(a):
     prod = json.loads(Path(a.production).read_text())
     failures = []
     if a.extractor_eval:
-        ev = json.loads(Path(a.extractor_eval).read_text())["summary"]
+        doc = json.loads(Path(a.extractor_eval).read_text())
+        ev, pe = doc["summary"], prod["extractor"]
         cand = ev[a.system] if a.system else next(iter(ev.values()))
-        ok, why = gate(cand, prod["extractor"]["metrics"])
+        if pe.get("system") in ev and pe.get("system") != a.system:
+            # the production system was scored in the same run, on the same items: the fairest baseline there is
+            baseline, source, comparable = ev[pe["system"]], f"{pe['system']} in the same evaluation run", True
+        else:
+            baseline, source = pe["metrics"], "the metrics recorded in production.json"
+            fp, want = doc.get("gold", {}).get("sha256"), pe.get("gold_sha256")
+            comparable = (fp == want) if (fp and want) else cand.get("n") in (None, pe.get("gold_limit"))
+        ok, why = gate(cand, baseline)
+        if not comparable:  # scores on different inputs or labels say nothing about which model is better
+            ok, why = False, why + ["evaluated on a different gold set than production (fingerprint or size differs); "
+                                    f"rerun llm-eval on {pe.get('gold_set')} with --limit {pe.get('gold_limit')}, "
+                                    f"or include the production system ({pe.get('system')}) in the run"]
         failures += [f"extractor {w}" for w in why]
-        print(f"extractor gate: {'PASS' if ok else 'FAIL'}")
+        print(f"extractor gate: {'PASS' if ok else 'FAIL'} (baseline: {source})")
     if a.reaction_metrics:
         res = json.loads(Path(a.reaction_metrics).read_text())["results"][a.feature_set]
         cand = {"auc": res["auc"]["auc"], "ic": res["ic"]["mean"], "auc_p": res["auc"]["p_vs_0.5"]}
@@ -108,6 +115,24 @@ def _reg_drift(p):
     p.set_defaults(fn=cmd_drift)
 
 
+def cmd_llm_serve(a):
+    import uvicorn
+
+    from .llm_server import create_llm_app
+
+    adapters = dict(x.split("=", 1) for x in (a.adapter or []))
+    uvicorn.run(create_llm_app(a.base, adapters, a.base_name), host=a.host, port=a.port, log_level="warning")
+
+
+def _reg_llm_serve(p):
+    p.add_argument("--base", required=True, help="path of the base model (transformers format)")
+    p.add_argument("--adapter", action="append", help="name=path of a LoRA adapter (repeatable)")
+    p.add_argument("--base-name", default="base")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(fn=cmd_llm_serve)
+
+
 def _reg_register(p):
     p.add_argument("--lake", default="data/lake")
     p.add_argument("--metrics", default="artifacts/phase2/metrics.json")
@@ -141,6 +166,7 @@ def _reg_gate(p):
 
 
 COMMANDS = {
+    "llm-serve": (_reg_llm_serve, "serve a local model and LoRA adapters behind an OpenAI compatible API"),
     "drift-report": (_reg_drift, "compare recent filings with the training reference and recommend retraining"),
     "register": (_reg_register, "fit the final reaction model and register it"),
     "promote": (_reg_promote, "point a registry alias (champion) at a version"),

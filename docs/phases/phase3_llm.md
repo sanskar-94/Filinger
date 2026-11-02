@@ -64,34 +64,102 @@ TRL `SFTTrainer` with a PEFT `LoraConfig`: rank 16, alpha 32, dropout 0.05, all 
 learning rate 2e-4 cosine, two epochs, completion only loss, early model selection on validation loss,
 optional 4 bit NF4 QLoRA (`configs/qlora_llama3.1_8b.json`) and a merged checkpoint for vLLM. The script
 adapts to API renames across TRL and transformers versions (for example `warmup_ratio` and `torch_dtype`).
+Every run logs to MLflow (experiment `phase3-lora`) with its parameters, curves and the adapter folder, and
+writes the run id next to the adapter so the registered version links back to the run that made it.
 
-Verified here: `scripts/smoke_lora.py` builds a tokenizer and a two layer Qwen2 style model from the
-synthetic corpus, runs the real training loop, saves the adapter and merged weights, reloads the adapter
-for inference and scores it with the harness (`tests/test_lora_smoke.py`, CI job `llm`). A real run needs
-one 24 GB GPU for the 3B model: `flab llm-train --config configs/lora_qwen2.5_3b.json`.
+A real run of the intended models needs one 24 GB GPU for the 3B model:
+`flab llm-train --config configs/lora_qwen2.5_3b.json`. The first runs had no GPU and could not reach the Hugging
+Face hub, so the whole method was run end to end on a model small enough for four CPU cores:
+
+1. `flab llm-pretrain` builds a 4,096 token byte level BPE tokenizer and pretrains a 5.2M parameter Qwen2 style
+   model from scratch on the paragraphs of training period filings only (2.1M tokens, 250 steps; held out
+   perplexity 1.25, which mostly says the synthetic filings are templated).
+2. Two LoRA configurations fine tune it on 2,745 teacher labelled filings with the compact prompt (the schema
+   instruction without the long field definitions, 1,500 character text budget, so a sample fits 1,024 tokens):
+
+| Adapter | Config | Trainable | Steps | Validation loss | Token accuracy |
+|---|---|---|---|---|---|
+| champion | `configs/lora_tiny_champion.json`: r 16, all linear layers, 3 epochs, lr 2e-3, merged | 8.2% | 1,032 | 1.43 | 93.4% |
+| challenger | `configs/lora_tiny_challenger.json`: r 4, q and v only, 1 epoch, lr 1e-3 | 0.4% | 344 | 5.66 | 20.4% |
+
+`scripts/smoke_lora.py` (CI job `llm-smoke`) runs the same loop on a two layer model in seconds.
 
 ## Evaluation (`filings_lab/llm/eval_harness.py`)
 
 Per system: JSON validity, schema validity, macro F1 and accuracy per field, an `extraction_score` (mean
 macro F1), quote grounding (is each quote really in the cited paragraph), latency p50 and p95, and cost per
 1,000 filings from API usage or GPU hours. Systems are compared with a paired bootstrap over gold items.
-`gate()` blocks a candidate that is worse than production on any gated metric beyond its tolerance; Phase 4
-runs it in CI.
+Local models can generate in batches (`--batch-size`): quality is identical under greedy decoding, latency
+becomes amortized, so serving latency is measured against the served endpoint one request at a time.
+
+Every `eval.json` records a fingerprint of the exact inputs and labels it scored. Two evaluations are only
+comparable when the fingerprints match: the compact gold set holds the same 400 filings as the production gold
+set, but its shorter text budget changes 155 inputs and 51 labels.
 
 ```bash
-flab llm-eval --systems "rules,vllm:http://localhost:8000/v1|qwen-base,vllm:http://localhost:8000/v1|filings-extractor,frontier" \
-              --reference "vllm:http://localhost:8000/v1|qwen-base"
+flab llm-eval --gold data/llm_dataset_compact/gold.jsonl --limit 400 --prompt-style compact --batch-size 16 \
+  --systems "rules,hf:artifacts/tiny-base@tiny-base,hf:artifacts/tiny-base|artifacts/lora/tiny-champion/adapter@tiny-lora-champion,hf:artifacts/tiny-base|artifacts/lora/tiny-challenger/adapter@tiny-lora-challenger" \
+  --reference rules --out artifacts/phase3_tiny
 ```
+
+## Results on the synthetic world (400 gold filings, compact inputs)
+
+| System | JSON valid | Schema valid | Extraction score | Guidance F1 | Tone F1 | Quote grounding | Latency p50 / p95 |
+|---|---|---|---|---|---|---|---|
+| rules (production) | 100% | 100% | 0.853 | 1.00 | 0.54 | 100% | under 1 ms |
+| tiny base, no fine tuning | 0% | 0% | 0.000 | 0.00 | 0.00 | n/a | 0.27 / 0.36 s (batched) |
+| tiny + LoRA champion | 100% | 100% | 0.377 | 0.30 | 0.22 | 29% | 0.39 / 0.48 s (served, one at a time) |
+| tiny + LoRA challenger | 0% | 0% | 0.000 | 0.00 | 0.00 | n/a | 0.27 / 0.35 s (batched) |
+
+Paired bootstrap, champion minus rules on extraction score: minus 0.48, 95% CI [minus 0.51, minus 0.38].
+Reports: `artifacts/phase3_tiny/report.md` and, for the served model, `artifacts/phase3_served/report.md`.
+
+What this shows, read plainly:
+
+1. Fine tuning does what it is for. The base model writes filing style prose and never a JSON object; after
+   LoRA the same model emits schema valid JSON for every gold filing, and the served model scores exactly what
+   the in process model scores, field for field.
+2. Capacity is the limit. A 5M parameter model learns the format but not the reading: it mostly predicts the
+   majority class per field, and only 29% of its quotes are grounded. The rule baseline wins by 0.48 on the
+   templated synthetic text, which is the expected result for a model this size.
+3. The undertrained challenger never closes a JSON object. The gate exists for exactly this adapter.
+
+## The gate decides (`flab gate`)
+
+`gate()` blocks a candidate that is worse than production on any gated metric beyond its tolerance. When the
+evaluation run also scored the production system, that row is the baseline (same items, same labels);
+otherwise the stored production metrics are used only if the gold fingerprint matches, and the gate refuses
+anything else. CI's model gate scores production in the same run for exactly this reason, and a from scratch
+rebuild of the evaluation world reproduces the recorded fingerprint.
+
+```
+tiny-lora-champion   FAIL (baseline: rules in the same evaluation run)
+  extraction_score 0.3773 vs 0.8533, quote_grounding_rate 0.2900 vs 1.0000, guidance_direction_f1 0.2982 vs 1.0000
+tiny-lora-challenger FAIL (baseline: rules in the same evaluation run)
+  extraction_score 0.0000 vs 0.8533, schema_valid_rate 0.0000 vs 1.0000, guidance_direction_f1 0.0000 vs 1.0000
+```
+
+Production stays on the rules extractor (`models/production.json`).
+
+## Registry and lineage (`flab llm-register`)
+
+Both adapters are registered as versions of `filings-extractor` in the MLflow Model Registry, logged into their
+own training runs (so each version links to its curves and config), with the gold set scores as metrics and
+tags for the base model, LoRA rank, A/B variant and gate outcome (`gate=failed`). A registered version resolves
+to the adapter folder that vLLM loads; as a pyfunc it can also run on its own (base model plus adapter, input
+rows in, signals out). Without an MLflow server the same command writes the file registry.
 
 ## Feeding Phase 2
 
 `flab llm-features --system <spec>` writes `llm_*` columns per filing and `flab train --extra <file>` adds
 two feature sets (`llm_only`, `all_plus_llm`) plus a DeLong test of all plus LLM against all.
 
+PHASE2_TINY_PLACEHOLDER
+
 ## What the synthetic world can and cannot show
 
-On synthetic filings the rule baseline scores an extraction_score of 0.86 (guidance F1 1.0, tone F1 0.55)
-on 400 gold items, because the synthetic guidance sentences are templated; tone is where it struggles.
-Real filings phrase guidance in far more ways, which is exactly where the fine tuned model is expected to
-earn its place. Results for the base, fine tuned and frontier systems require a GPU and an API key and are
-deliberately not reported here; the commands above produce them, and the gate decides what ships.
+The synthetic guidance sentences are templated, which is why rules reach a guidance F1 of 1.0 and why a small
+model has nothing to add there; tone is where rules struggle (F1 0.54). Real filings phrase guidance in far
+more ways, which is where a 3B to 8B fine tuned model is expected to earn its place. Those runs need a GPU and
+the frontier teacher needs an API key, so their results are deliberately not reported here; the commands
+above produce them, and the gate decides what ships.

@@ -1,0 +1,18 @@
+{
+  "base_model": "artifacts/tiny-base",
+  "qlora": false,
+  "lora_r": 4,
+  "lora_alpha": 8,
+  "lora_dropout": 0.05,
+  "target_modules": ["q_proj", "v_proj"],
+  "learning_rate": 0.001,
+  "num_train_epochs": 1,
+  "per_device_train_batch_size": 8,
+  "gradient_accumulation_steps": 1,
+  "max_length": 1024,
+  "eval_steps": 200,
+  "logging_steps": 20,
+  "gradient_checkpointing": false,
+  "merge_after_training": false,
+  "report_to": ["mlflow"]
+}

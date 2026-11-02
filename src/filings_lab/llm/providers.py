@@ -214,16 +214,16 @@ class OpenAICompatExtractor(Extractor):
     """vLLM (or any OpenAI compatible server). ``guided=True`` uses vLLM's JSON schema constrained decoding."""
 
     def __init__(self, base_url: str, model: str, name: str | None = None, guided: bool = False,
-                 max_tokens: int = 768, timeout: float = 120.0, session=None):
+                 max_tokens: int = 768, timeout: float = 120.0, session=None, style: str = "full"):
         import requests
 
-        self.base_url, self.model, self.guided = base_url.rstrip("/"), model, guided
+        self.base_url, self.model, self.guided, self.style = base_url.rstrip("/"), model, guided, style
         self.max_tokens, self.timeout = max_tokens, timeout
         self.session = session or requests.Session()
         self.name = name or f"vllm:{model}{':guided' if guided else ''}"
 
     def extract(self, inp: ExtractionInput) -> ExtractionResult:
-        body = {"model": self.model, "messages": chat_messages(inp), "temperature": 0.0, "max_tokens": self.max_tokens}
+        body = {"model": self.model, "messages": chat_messages(inp, style=self.style), "temperature": 0.0, "max_tokens": self.max_tokens}
         if self.guided:
             body["response_format"] = {"type": "json_schema",
                                        "json_schema": {"name": "filing_signals", "schema": json_schema(), "strict": True}}
@@ -242,7 +242,8 @@ class OpenAICompatExtractor(Extractor):
 class HFExtractor(Extractor):
     """Local transformers inference (greedy), optionally with a LoRA adapter on top of the base model."""
 
-    def __init__(self, model_path: str, adapter_path: str | None = None, max_new_tokens: int = 512, name: str | None = None):
+    def __init__(self, model_path: str, adapter_path: str | None = None, max_new_tokens: int = 512, name: str | None = None,
+                 style: str = "full"):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -257,13 +258,15 @@ class HFExtractor(Extractor):
 
             model = PeftModel.from_pretrained(model, adapter_path)
         self.model = model.eval()
-        self.max_new_tokens = max_new_tokens
+        self.max_new_tokens, self.style = max_new_tokens, style
+        if self.tok.pad_token_id is None:
+            self.tok.pad_token = self.tok.eos_token
         self.name = name or f"hf:{model_path.rstrip('/').split('/')[-1]}{'+lora' if adapter_path else ''}"
 
     def extract(self, inp: ExtractionInput) -> ExtractionResult:
         import torch
 
-        ids = self.tok.apply_chat_template(chat_messages(inp), add_generation_prompt=True, return_tensors="pt",
+        ids = self.tok.apply_chat_template(chat_messages(inp, style=self.style), add_generation_prompt=True, return_tensors="pt",
                                            return_dict=True)
         ids = {k: v.to(self.model.device) for k, v in ids.items()}
         t0 = time.perf_counter()
@@ -274,6 +277,29 @@ class HFExtractor(Extractor):
         text = self.tok.decode(new, skip_special_tokens=True)
         return _result(self.name, inp, text, time.perf_counter() - t0,
                        input_tokens=int(ids["input_ids"].shape[1]), output_tokens=int(new.shape[0]))
+
+    def extract_many(self, inputs: list[ExtractionInput], batch_size: int = 16) -> list[ExtractionResult]:
+        """Batched greedy generation (left padded), several times faster than one at a time."""
+        import torch
+
+        self.tok.padding_side = "left"
+        out: list[ExtractionResult] = []
+        for i in range(0, len(inputs), batch_size):
+            chunk = inputs[i:i + batch_size]
+            prompts = [self.tok.apply_chat_template(chat_messages(x, style=self.style), add_generation_prompt=True, tokenize=False)
+                       for x in chunk]
+            enc = self.tok(prompts, return_tensors="pt", padding=True, add_special_tokens=False).to(self.model.device)
+            t0 = time.perf_counter()
+            with torch.no_grad():
+                gen = self.model.generate(**enc, max_new_tokens=self.max_new_tokens, do_sample=False,
+                                          pad_token_id=self.tok.pad_token_id, eos_token_id=self.tok.eos_token_id)
+            per = (time.perf_counter() - t0) / len(chunk)
+            for k, x in enumerate(chunk):
+                new = gen[k, enc["input_ids"].shape[1]:]
+                text = self.tok.decode(new, skip_special_tokens=True)
+                out.append(_result(self.name, x, text, per, input_tokens=int(enc["attention_mask"][k].sum()),
+                                   output_tokens=int((new != self.tok.pad_token_id).sum())))
+        return out
 
 
 # ------------------------------------------------------------------------------------------- replay

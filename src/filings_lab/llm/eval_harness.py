@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from .providers import ExtractionResult, Extractor
-from .schema import LABEL_FIELDS
+from .schema import LABEL_FIELDS, quote_is_grounded
 
 CLASSES = {
     "guidance_direction": ["raised", "lowered", "maintained", "none"],
@@ -31,16 +31,28 @@ CLASSES = {
 INVALID = "__invalid__"
 
 
-def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^\w\s%$.,]", "", s.lower())).strip()
+def gold_fingerprint(gold) -> str:
+    """Identity of an evaluation set: the exact inputs and labels scored. Two evaluations are comparable only when
+    their fingerprints match (same filings is not enough: a different text budget changes inputs and labels)."""
+    import hashlib
+
+    payload = [[inp.accession, inp.form, inp.paragraphs, lab] for inp, lab in gold]
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def run_system(ex: Extractor, gold, workers: int = 1, cache: Path | None = None) -> list[ExtractionResult]:
-    """Run one extractor over the gold set; results are cached as JSONL so reruns are free."""
+def run_system(ex: Extractor, gold, workers: int = 1, cache: Path | None = None,
+               batch_size: int = 1) -> list[ExtractionResult]:
+    """Run one extractor over the gold set; results are cached as JSONL so reruns are free.
+
+    With ``batch_size > 1`` a local model generates in batches. Quality metrics are identical (greedy decoding),
+    but ``latency_s`` becomes batch time divided by batch size, so serving latency is measured separately
+    against the served endpoint, one request at a time."""
     if cache and cache.exists():
         return [ExtractionResult(**json.loads(x)) for x in cache.read_text().splitlines() if x.strip()]
     inputs = [inp for inp, _ in gold]
-    if workers > 1:
+    if batch_size > 1 and hasattr(ex, "extract_many"):
+        results = ex.extract_many(inputs, batch_size=batch_size)
+    elif workers > 1:
         with ThreadPoolExecutor(workers) as pool:
             results = list(pool.map(ex.extract, inputs))
     else:
@@ -61,11 +73,7 @@ def item_table(results: list[ExtractionResult], gold) -> pd.DataFrame:
             row[f"gold_{f}"] = lab[f]
             row[f"pred_{f}"] = pred.get(f, INVALID) if r.schema_valid else INVALID
         quotes = pred.get("key_quotes", []) if r.schema_valid else []
-        grounded = 0
-        for q in quotes:
-            k = q.get("paragraph", 0) - 1
-            if 0 <= k < len(inp.paragraphs) and _norm(q.get("text", "")) and _norm(q["text"]) in _norm(inp.paragraphs[k]["text"]):
-                grounded += 1
+        grounded = sum(quote_is_grounded(q, inp.paragraphs) for q in quotes)
         row["n_quotes"], row["n_grounded"] = len(quotes), grounded
         rows.append(row)
     return pd.DataFrame(rows)
@@ -123,13 +131,13 @@ def paired_bootstrap(a: pd.DataFrame, b: pd.DataFrame, n_boot: int = 1000, seed:
 
 
 def evaluate(systems: list[Extractor], gold, out_dir: str | Path, reference: str | None = None, workers: int = 1,
-             gpu_hourly_usd: dict | None = None) -> dict:
+             gpu_hourly_usd: dict | None = None, batch_size: int = 1) -> dict:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     tables, summary = {}, {}
     for ex in systems:
         safe = re.sub(r"[^\w.-]", "_", ex.name)
-        res = run_system(ex, gold, workers, cache=out / "predictions" / f"{safe}.jsonl")
+        res = run_system(ex, gold, workers, cache=out / "predictions" / f"{safe}.jsonl", batch_size=batch_size)
         tables[ex.name] = item_table(res, gold)
         summary[ex.name] = summarize(tables[ex.name], (gpu_hourly_usd or {}).get(ex.name))
     comparisons = {}
@@ -137,7 +145,7 @@ def evaluate(systems: list[Extractor], gold, out_dir: str | Path, reference: str
         for name, t in tables.items():
             if name != reference:
                 comparisons[f"{name} vs {reference}"] = paired_bootstrap(t, tables[reference])
-    result = {"summary": summary, "comparisons": comparisons}
+    result = {"summary": summary, "comparisons": comparisons, "gold": {"n": len(gold), "sha256": gold_fingerprint(gold)}}
     (out / "eval.json").write_text(json.dumps(result, indent=2))
     (out / "report.md").write_text(render(result))
     items = pd.concat([t.assign(system=k) for k, t in tables.items()], ignore_index=True)

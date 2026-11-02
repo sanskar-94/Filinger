@@ -38,9 +38,13 @@ jobs:
       - name: Extractor candidate
         run: |
           SYSTEM=$(python -c "import json;print(json.load(open('models/candidate.json'))['extractor']['system'])")
+          PROD=$(python -c "import json;print(json.load(open('models/production.json'))['extractor']['system'])")
           if [ -n "$CANDIDATE_LLM_URL" ]; then SYSTEM="vllm:${CANDIDATE_LLM_URL}|filings-extractor-b|guided"; fi
+          # score production in the same run so the gate compares both on identical inputs and labels
+          SYSTEMS="$SYSTEM"
+          if [ "$SYSTEM" != "$PROD" ]; then SYSTEMS="$SYSTEM,$PROD"; fi
           flab llm-dataset --lake data/lake
-          flab llm-eval --systems "$SYSTEM" --limit 400 --out artifacts/phase3
+          flab llm-eval --systems "$SYSTEMS" --limit 400 --out artifacts/phase3
           echo "SYSTEM=$SYSTEM" >> "$GITHUB_ENV"
       - name: Gate against production
         run: |

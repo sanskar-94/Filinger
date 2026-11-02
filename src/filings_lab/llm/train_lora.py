@@ -172,6 +172,9 @@ def main(argv=None):
         tr.params(asdict(cfg))
         m = train(cfg, a.data, a.out)
         tr.metrics({k: v for k, v in m.items() if isinstance(v, (int, float))})
+        tr.artifacts(str(Path(a.out) / "adapter"), "adapter")
+        m["run_id"] = tr.id  # flab llm-register logs the model version into this run: training lineage
+        (Path(a.out) / "train_metrics.json").write_text(json.dumps(m, indent=2, default=float))
     print(json.dumps(m, indent=2, default=float))
 
 

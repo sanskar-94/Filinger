@@ -69,3 +69,16 @@ def parse(raw: str) -> tuple[FilingSignals | None, bool, str | None]:
         return FilingSignals.model_validate(obj), True, None
     except ValidationError as exc:
         return None, True, f"schema: {exc.errors()[0]['loc']} {exc.errors()[0]['msg']}"
+
+
+def _norm(s: str) -> str:
+    s = re.sub(r"[\u002d\u2010-\u2015]", " ", s.lower())  # "full-year" quotes "full year" and vice versa
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s%$.,]", "", s)).strip()
+
+
+def quote_is_grounded(quote: dict, paragraphs: list[dict]) -> bool:
+    """True when the quote's text really occurs (case, punctuation and spacing aside) in the paragraph it cites.
+    The eval harness scores this; the API reports it per quote, so a fabricated quote is never shown as evidence."""
+    k = int(quote.get("paragraph", 0) or 0) - 1
+    text = _norm(quote.get("text", "") or "")
+    return bool(text) and 0 <= k < len(paragraphs) and text in _norm(paragraphs[k].get("text", "") or "")

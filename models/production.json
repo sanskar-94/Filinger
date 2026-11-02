@@ -14,6 +14,7 @@
     "served_as": "fallback until a fine tuned adapter passes the gate",
     "gold_set": "data/llm_dataset/gold.jsonl",
     "gold_limit": 400,
+    "gold_sha256": "d497a0d7eeca3e95532fa4fa5c4e50794ab546aeae8a927423a7b09de7e38909",
     "metrics": {
       "extraction_score": 0.8634,
       "schema_valid_rate": 1.0,

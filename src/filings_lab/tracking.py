@@ -48,6 +48,9 @@ class _MlflowRun:  # pragma: no cover
     def artifact(self, path: str):
         mlflow.log_artifact(path)
 
+    def artifacts(self, local_dir: str, artifact_path: str | None = None):
+        mlflow.log_artifacts(local_dir, artifact_path=artifact_path)
+
     def tags(self, d: dict):
         mlflow.set_tags(d)
 
@@ -66,6 +69,9 @@ class _JsonRun:
 
     def artifact(self, path):
         self.data["artifacts"].append(str(path))
+
+    def artifacts(self, local_dir, artifact_path=None):
+        self.data["artifacts"].append(str(local_dir))
 
     def tags(self, d):
         self.data["tags"].update(d)
