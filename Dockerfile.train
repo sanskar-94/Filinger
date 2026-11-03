@@ -1,0 +1,22 @@
+# Training image for the Phase 3 GPU job: CUDA PyTorch plus the lab with its LLM extras. It runs
+# scripts/gpu_finetune.sh (labels, dataset, LoRA or QLoRA fine tune, evaluation, gate, registration).
+#   docker build -f Dockerfile.train -t filings-train .
+#   docker run --gpus all -e HF_TOKEN -e ANTHROPIC_API_KEY -e MLFLOW_TRACKING_URI -v $PWD/data:/app/data filings-train
+#   docker run --gpus all -e CONFIG=configs/qlora_llama3.1_8b.json ... filings-train
+# torch comes from the base image (CUDA 12.8 build); pip keeps it because the llm extra only needs torch>=2.2.
+ARG TORCH_IMAGE=pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
+FROM ${TORCH_IMAGE}
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 HF_HOME=/models/hf MLFLOW_DISABLE_AGENT_HINT=1
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
+    pip install ".[llm,ml,serve,aws]" && python -c "import torch, transformers, peft, trl; print('torch', torch.__version__)"
+COPY configs ./configs
+COPY models ./models
+COPY scripts ./scripts
+RUN useradd --create-home --uid 10001 app && mkdir -p /models/hf /app/data /app/artifacts && \
+    chown -R 10001:10001 /models /app/data /app/artifacts
+USER 10001:10001
+ENTRYPOINT ["bash", "scripts/gpu_finetune.sh"]

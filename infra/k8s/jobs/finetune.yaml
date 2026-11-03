@@ -1,0 +1,72 @@
+# On demand Phase 3 run on the GPU node group (one L4, 24 GB). The deploy workflow pushes the training image
+# tagged with the commit; point the Job at it when creating it:
+#   sed "s#image: filings-train:latest#image: $REGISTRY/filings-train:$SHA#" infra/k8s/jobs/finetune.yaml \
+#     | kubectl create -n filings-lab -f -
+# It syncs the lake (and a prebuilt dataset if one is in S3), runs scripts/gpu_finetune.sh in the training image
+# (teacher labels when the Anthropic key secret exists, dataset, LoRA fine tune of Qwen2.5 3B, evaluation of the
+# base, fine tuned, frontier and production systems on the gold set, gate, registration with the verdict), then
+# uploads the run folder and the adapter as a candidate. Serving it stays a reviewed pull request through the
+# model gate. For Llama 3.1 8B set CONFIG to configs/qlora_llama3.1_8b.json and provide the HF token secret.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: finetune-extractor-
+  labels: {app.kubernetes.io/part-of: filings-lab, app: finetune-extractor}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 43200
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: finetune-extractor}
+    spec:
+      serviceAccountName: filings-lab-trainer
+      restartPolicy: Never
+      nodeSelector: {workload: gpu}
+      tolerations: [{key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}]
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      initContainers:
+        - name: sync
+          image: amazon/aws-cli:2.27.0
+          command: ["sh", "-c", "aws s3 sync $LAKE_S3_PREFIX /app/data/lake --exclude '*' --include 'bronze_index.parquet' --include 'bronze_index.parquet/*' --include 'silver/paragraphs/*' && aws s3 sync $DATASET_S3_PREFIX /app/data/llm_dataset"]
+          env:
+            - {name: DATASET_S3_PREFIX, value: s3://filings-lab-prod/llm/dataset}
+          envFrom: [{configMapRef: {name: filings-api}}]
+          volumeMounts: [{name: data, mountPath: /app/data}]
+      containers:
+        - name: finetune
+          image: filings-train:latest
+          command: ["bash", "-c", "bash scripts/gpu_finetune.sh; rc=$?; echo $rc > /app/artifacts/.exit; exit $rc"]
+          env:
+            - {name: CONFIG, value: configs/lora_qwen2.5_3b.json}
+            - {name: NAME, value: qwen3b}
+            - {name: LAKE, value: /app/data/lake}
+            - {name: OUT, value: /app/artifacts/gpu_run}
+            - {name: FLAB_REGISTRY, value: /app/artifacts/registry}
+            - name: ANTHROPIC_API_KEY
+              valueFrom: {secretKeyRef: {name: anthropic-api-key, key: key, optional: true}}
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: token, optional: true}}
+            - name: MLFLOW_TRACKING_URI
+              valueFrom: {secretKeyRef: {name: mlflow-tracking, key: uri, optional: true}}
+          resources:
+            requests: {cpu: "3", memory: 14Gi, nvidia.com/gpu: 1}
+            limits: {memory: 15Gi, nvidia.com/gpu: 1}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: data, mountPath: /app/data}
+            - {name: artifacts, mountPath: /app/artifacts}
+            - {name: hf-cache, mountPath: /models/hf}
+            - {name: shm, mountPath: /dev/shm}
+        # waits for the run, uploads only on success, and exits with the run's code so the Job reports the truth
+        - name: upload
+          image: amazon/aws-cli:2.27.0
+          env:
+            - {name: NAME, value: qwen3b}
+          command: ["sh", "-c", "until [ -f /app/artifacts/.exit ]; do sleep 30; done; rc=$(cat /app/artifacts/.exit); [ \"$rc\" = 0 ] && aws s3 sync /app/artifacts/gpu_run s3://filings-lab-prod/finetune/runs/$$(date -u +%Y%m%dT%H%M%S) && aws s3 sync /app/artifacts/gpu_run/$NAME/adapter s3://filings-lab-prod/adapters/candidate; exit $rc"]
+          volumeMounts: [{name: artifacts, mountPath: /app/artifacts}]
+      volumes:
+        - {name: data, emptyDir: {sizeLimit: 20Gi}}
+        - {name: artifacts, emptyDir: {sizeLimit: 20Gi}}
+        - {name: hf-cache, emptyDir: {sizeLimit: 40Gi}}
+        - {name: shm, emptyDir: {medium: Memory, sizeLimit: 4Gi}}

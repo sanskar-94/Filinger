@@ -136,9 +136,13 @@ autoscaling does not use CPU.
 5. vLLM: GPU node group (g6.xlarge, one L4) with a taint, init container syncs the champion and challenger
    adapters, startup probe for model load, KEDA scaling on `vllm:num_requests_waiting` because CPU says
    nothing about a GPU server's load, NetworkPolicy so only the API and Prometheus can reach it.
-6. Terraform creates the VPC, EKS with both node groups, ECR repositories, two IRSA roles (serving: read the
-   registry and lake, append experiment logs; trainer: read the lake and logs, write registry versions and
-   readouts) and the GitHub OIDC deploy role (no long lived keys).
+6. Fine tuning on demand: `infra/k8s/jobs/finetune.yaml` runs the Phase 3 pipeline in the training image
+   (`Dockerfile.train`) on the GPU node group and uploads the candidate adapter; promotion is a reviewed pull
+   request like any other model change.
+7. Terraform creates the VPC, EKS with both node groups, ECR repositories for all four images (the web image's
+   repository was missing, so its push in the deploy workflow would have failed), two IRSA roles (serving: read the
+   registry and lake, append experiment logs; trainer: read the lake, datasets and logs, write registry versions,
+   readouts, fine tune runs and candidate adapters) and the GitHub OIDC deploy role (no long lived keys).
 
 ## CI/CD (`.github/workflows`)
 

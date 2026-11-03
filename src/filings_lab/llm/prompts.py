@@ -47,15 +47,30 @@ class ExtractionInput:
         return "\n\n".join(f"[P{i + 1}] ({p['section']}) {p['text']}" for i, p in enumerate(self.paragraphs))
 
 
+# direct evidence for a labelled field: a statement about the outlook, liquidity distress, a specific proceeding
+EVIDENCE = {
+    "guidance_direction": re.compile(r"guidance|outlook", re.I),
+    "liquidity_concern": re.compile(r"going concern|substantial doubt|covenant|waiver|raise additional capital", re.I),
+    "litigation_risk": re.compile(r"lawsuit|class action|subpoena|verdict|investigation", re.I),
+}
+
+
+def _is_evidence(text: str) -> bool:
+    return any(rx.search(text) for rx in EVIDENCE.values())
+
+
 def select_paragraphs(paragraphs: list[dict], budget_chars: int = 12_000) -> list[dict]:
-    """Keep every paragraph if they fit; otherwise rank by keyword density, keep the best within budget and
-    restore document order."""
+    """Keep every paragraph if they fit. Otherwise paragraphs carrying direct evidence for a labelled field come
+    first, then the rest by keyword count; the best that fit the budget are kept, in document order.
+
+    Ranking on keyword count alone let a long results paragraph full of generic words ("increased", "declined")
+    push out a one line class action or covenant waiver, leaving a label the prompt could not support."""
     total = sum(len(p["text"]) for p in paragraphs)
     if total <= budget_chars:
         return paragraphs
     scored = sorted(
         range(len(paragraphs)),
-        key=lambda i: (-len(KEYWORDS.findall(paragraphs[i]["text"])), i),
+        key=lambda i: (not _is_evidence(paragraphs[i]["text"]), -len(KEYWORDS.findall(paragraphs[i]["text"])), i),
     )
     keep, used = [], 0
     for i in scored:

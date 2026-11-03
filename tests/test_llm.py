@@ -44,6 +44,25 @@ def test_parse_handles_fences_and_reports_errors():
     assert sig is None and not ok
 
 
+def test_select_paragraphs_keeps_short_evidence_over_long_keyword_rich_text():
+    long = ("Revenue increased while margins declined and costs increased; we expect results to improve after the "
+            "impairment, and orders decreased before demand increased again. ") * 3
+    paras = [{"section": "mdna", "text": long} for _ in range(6)]
+    paras.insert(4, {"section": "legal", "text": "A putative securities class action was filed against the Company."})
+    kept = select_paragraphs(paras, budget_chars=900)
+    assert paras[4] in kept  # one keyword, but it is the only evidence for litigation_risk
+    idx = [paras.index(p) for p in kept]
+    assert idx == sorted(idx) and sum(len(p["text"]) for p in kept) <= 900
+
+
+def test_unsupported_labels_counts_positives_the_prompt_cannot_support():
+    from filings_lab.llm.dataset import unsupported_labels
+
+    inp = ExtractionInput("a", "10-K", "Acme", [{"paragraph_id": "p", "section": "mdna", "text": "Revenue grew."}])
+    lab = {"guidance_direction": "raised", "management_tone": "positive", "liquidity_concern": False, "litigation_risk": True}
+    assert unsupported_labels({"a": inp}, {"a": lab}) == {"guidance_direction": 1, "liquidity_concern": 0, "litigation_risk": 1}
+
+
 def test_select_paragraphs_keeps_signal_and_order():
     paras = [{"section": "mdna", "text": f"filler paragraph {i} " * 20} for i in range(20)]
     paras[13]["text"] = "We now expect full year results above our prior outlook and guidance."
@@ -199,6 +218,12 @@ def test_dataset_splits_and_gold(small_world, small_lake, tmp_path):
     assert held and not (held & train_ciks)
     stats = write_dataset(inputs, labels, splits, tmp_path)
     assert stats["train"] > 0 and stats["test"] > 0
+    # every positive ground truth label has its evidence in the prompt, even at a tight text budget
+    for split in ("train", "val", "test"):
+        assert set(stats[f"{split}_unsupported_labels"].values()) == {0}, (split, stats)
+    tight = build_inputs(paragraphs, small_world["index"], budget_chars=1500)
+    tight_stats = write_dataset(tight, labels_from_synthetic_truth(small_world["truth"], tight), splits, tmp_path / "tight")
+    assert all(set(tight_stats[f"{s}_unsupported_labels"].values()) == {0} for s in ("train", "val", "test")), tight_stats
     rec = json.loads((tmp_path / "train.jsonl").read_text().splitlines()[0])
     assert rec["prompt"][0]["role"] == "system" and rec["completion"][0]["role"] == "assistant"
     FilingSignals.model_validate_json(rec["completion"][0]["content"])
@@ -246,3 +271,23 @@ def test_bi_extractor_table_applies_the_gate_against_production_in_the_same_run(
     t = llm_extractor_table(tmp_path / "eval.json").set_index("system")
     assert t.loc["rules", "gate"] == "production" and t.loc["good", "gate"] == "pass"
     assert t.loc["bad", "gate"] == "fail" and "extraction_score" in t.loc["bad", "gate_reasons"]
+
+
+def test_replay_system_scores_labels_made_elsewhere(tmp_path):
+    from filings_lab.llm.cli import make_system
+
+    labels = tmp_path / "labels.jsonl"
+    labels.write_text(json.dumps({"accession": INP.accession, "signals": LABEL}) + "\n")
+    ex = make_system(f"replay:{labels}@annotator")
+    r = ex.extract(INP)
+    assert ex.name == "annotator" and r.schema_valid and r.signals["guidance_direction"] == "raised"
+    missing = ex.extract(ExtractionInput("0000000009-24-000009", "8-K", "Other", INP.paragraphs))
+    assert not missing.schema_valid  # a filing the annotator never labelled scores as a miss, not a pass
+
+
+def test_mlflow_reporting_only_with_a_tracking_server(monkeypatch):
+    from filings_lab.llm.train_lora import _reporters
+
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    assert _reporters(["mlflow"]) == ["none"] and _reporters(["mlflow", "tensorboard"]) == ["tensorboard"]
+    assert _reporters(["none"]) == ["none"]

@@ -48,6 +48,13 @@ jobs:
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e ".[ml,serve,dev]" transformers peft trl datasets accelerate tokenizers
       - run: pytest -q tests/test_lora_smoke.py tests/test_llm_server.py
+      - name: GPU fine tune pipeline, smoke mode on a tiny world built from scratch
+        run: |
+          flab synth --out data/synthetic --companies 6 --start 2016-01-01 --end 2020-12-31
+          flab local --index data/synthetic/index.parquet --prices data/synthetic/prices.parquet --lake data/lake --workers 2
+          flab llm-dataset --lake data/lake --prompt-style compact --budget 1500 --test-years 1 --out data/llm_dataset_compact
+          flab llm-pretrain --lake data/lake --dataset data/llm_dataset_compact --out artifacts/tiny-base --max-steps 10 --test-years 1
+          SMOKE=1 bash scripts/gpu_finetune.sh
 
   web:
     runs-on: ubuntu-latest
@@ -85,6 +92,7 @@ jobs:
               -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
               /tmp/$overlay.yaml
           done
+          ./kubeconform -strict -summary -ignore-missing-schemas -schema-location default infra/k8s/jobs/*.yaml
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - name: Generated Kubernetes objects match their sources

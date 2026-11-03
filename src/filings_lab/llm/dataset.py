@@ -97,6 +97,21 @@ def sft_record(inp: ExtractionInput, label: dict, style: str = "full") -> dict:
     }
 
 
+def unsupported_labels(inputs: dict[str, ExtractionInput], labels: dict[str, dict]) -> dict[str, int]:
+    """Positive labels whose evidence is nowhere in the prompt text, per field. A model cannot be asked to find
+    what the input does not contain, so with ground truth labels this should be zero; with teacher labels it is a
+    review queue."""
+    from .prompts import EVIDENCE
+
+    out = {f: 0 for f in EVIDENCE}
+    for a, inp in inputs.items():
+        text = " ".join(p["text"] for p in inp.paragraphs)
+        for f, rx in EVIDENCE.items():
+            if labels[a].get(f) not in (False, "none", None) and not rx.search(text):
+                out[f] += 1
+    return out
+
+
 def write_dataset(inputs: dict[str, ExtractionInput], labels: dict[str, dict], splits: pd.Series, out_dir: str | Path,
                   max_train: int | None = None, seed: int = 0, style: str = "full") -> dict:
     out = Path(out_dir)
@@ -110,6 +125,7 @@ def write_dataset(inputs: dict[str, ExtractionInput], labels: dict[str, dict], s
             for a in accs:
                 fh.write(json.dumps(sft_record(inputs[a], labels[a], style)) + "\n")
         stats[name] = len(accs)
+        stats[f"{name}_unsupported_labels"] = unsupported_labels({a: inputs[a] for a in accs}, labels)
         if name == "test":  # the gold set for the eval harness: inputs and labels, no prompt formatting
             gold = [{"accession": a, "form": inputs[a].form, "company": inputs[a].company,
                      "paragraphs": inputs[a].paragraphs, "label": labels[a]} for a in accs]

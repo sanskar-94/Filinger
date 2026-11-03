@@ -85,7 +85,7 @@ module "eks" {
 }
 
 resource "aws_ecr_repository" "images" {
-  for_each             = toset(["filings-api", "filings-vllm"])
+  for_each             = toset(["filings-api", "filings-web", "filings-vllm", "filings-train"])
   name                 = each.key
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
@@ -127,8 +127,9 @@ resource "aws_iam_policy" "serving_read" {
   policy = data.aws_iam_policy_document.serving_read.json
 }
 
-# Retraining and the A/B readout: read the lake and every replica's experiment log, write new registry
-# versions and readouts. Promotion to champion still goes through the reviewed model gate.
+# Retraining, the fine tune job and the A/B readout: read the lake, datasets and every replica's experiment log;
+# write registry versions, readouts, fine tune runs and candidate adapters. Promotion to champion (and serving an
+# adapter) still goes through the reviewed model gate.
 data "aws_iam_policy_document" "trainer" {
   statement {
     actions = ["s3:GetObject", "s3:ListBucket"]
@@ -137,6 +138,7 @@ data "aws_iam_policy_document" "trainer" {
       "arn:aws:s3:::filings-lab-${var.env}/lake/*",
       "arn:aws:s3:::filings-lab-${var.env}/registry/*",
       "arn:aws:s3:::filings-lab-${var.env}/experiments/*",
+      "arn:aws:s3:::filings-lab-${var.env}/llm/*",
     ]
   }
   statement {
@@ -144,6 +146,8 @@ data "aws_iam_policy_document" "trainer" {
     resources = [
       "arn:aws:s3:::filings-lab-${var.env}/registry/*",
       "arn:aws:s3:::filings-lab-${var.env}/experiments/readouts/*",
+      "arn:aws:s3:::filings-lab-${var.env}/finetune/*",
+      "arn:aws:s3:::filings-lab-${var.env}/adapters/candidate/*",
     ]
   }
 }

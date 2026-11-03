@@ -84,6 +84,25 @@ Face hub, so the whole method was run end to end on a model small enough for fou
 
 `scripts/smoke_lora.py` (CI job `llm-smoke`) runs the same loop on a two layer model in seconds.
 
+### Running the 3B to 8B fine tune
+
+`scripts/gpu_finetune.sh` is the whole phase as one job: teacher labels when `ANTHROPIC_API_KEY` is set, the
+dataset, the LoRA (Qwen2.5 3B) or QLoRA (`CONFIG=configs/qlora_llama3.1_8b.json`, Llama 3.1 8B) fine tune, an
+evaluation of the production rules, the base model, the fine tuned model and the frontier model on the same
+production gold filings, the gate, and registration of the adapter with its verdict (MLflow when
+`MLFLOW_TRACKING_URI` is set). It runs in three places:
+
+1. Any machine with one 24 GB GPU and access to the model hub: `bash scripts/gpu_finetune.sh`.
+2. The training image: `docker build -f Dockerfile.train -t filings-train .`, then
+   `docker run --gpus all -e HF_TOKEN -e ANTHROPIC_API_KEY filings-train` (the deploy workflow pushes it to ECR).
+3. The cluster: `infra/k8s/jobs/finetune.yaml`, a Job on the GPU node group that syncs the lake from S3, runs the
+   script and uploads the run and the candidate adapter; serving it stays a reviewed pull request.
+
+`SMOKE=1` runs every step of the same script on the small CPU model. CI does that on every push, on a tiny world it
+builds from scratch, so the GPU path is exercised continuously even though CI has no GPU. That run caught one
+bug: with `report_to: mlflow` and no tracking server, the transformers callback fell back to a local store and
+stopped the run; MLflow reporting now switches on only when a server is configured, as everywhere else.
+
 ## Evaluation (`filings_lab/llm/eval_harness.py`)
 
 Per system: JSON validity, schema validity, macro F1 and accuracy per field, an `extraction_score` (mean
@@ -123,6 +142,38 @@ What this shows, read plainly:
    majority class per field, and only 29% of its quotes are grounded. The rule baseline wins by 0.48 on the
    templated synthetic text, which is the expected result for a model this size.
 3. The undertrained challenger never closes a JSON object. The gate exists for exactly this adapter.
+
+## Frontier reference (blind labels)
+
+Without an API key the teacher path could not run, so a frontier model labelled a fixed sample of 60 gold filings
+directly, blind to the gold labels, from the same inputs and field definitions; the harness then scored those
+labels like any other system (`replay:` system spec). How the sample and labels were made, and what is not
+comparable (latency, cost), is in `eval/frontier_sample/README.md`. Every liquidity and litigation positive is in
+the sample, so compare the rows with each other, not with the 400 filing table above.
+
+| System, 60 filings | Schema valid | Extraction score | Guidance F1 | Tone F1 | Liquidity F1 | Litigation F1 | Quotes grounded |
+|---|---|---|---|---|---|---|---|
+| frontier reference | 100% | 0.909 | 1.00 | 0.67 | 1.00 | 0.97 | 100% |
+| rules (production) | 100% | 0.859 | 1.00 | 0.57 | 0.90 | 0.97 | 100% |
+| tiny + LoRA champion | 100% | 0.338 | 0.22 | 0.20 | 0.49 | 0.45 | 30% |
+| tiny base, tiny + LoRA challenger | 0% | 0.000 | 0.00 | 0.00 | 0.00 | 0.00 | n/a |
+
+Paired bootstrap, frontier minus rules: plus 0.050, 95% CI [0.006, 0.162], P(no gain) = 0.011. The frontier model
+gains where rules are weakest: tone, which needs weighing mixed statements, and liquidity, where the rules miss
+a stated need to raise capital to fund operations. Its one litigation miss is a filing whose 1,500 character excerpt contains no legal paragraph
+at all, which exposed a dataset fault (below). So the ordering the project expects holds on this data: frontier
+above rules above the CPU sized student, and a 3B to 8B student is what has to close the gap.
+
+### A dataset fault the frontier labels exposed
+
+Evidence selection ranked paragraphs by how many keywords they contain, so at a tight budget a long results
+paragraph full of generic words ("increased", "declined") could push out a one line class action or covenant
+waiver, leaving a positive label the prompt could not support. In the compact build used for the tiny model, 4 of
+128 litigation and 4 of 61 liquidity training positives, and 1 of 32 and 1 of 11 gold positives, had no supporting
+text. Paragraphs with direct evidence for a labelled field now rank first, every dataset build reports
+unsupported labels per field in `stats.json`, and a test requires zero at both budgets. Rebuilt with the fix, the
+compact dataset has none; the production gold set (every paragraph fits its budget) keeps its fingerprint. The
+tiny model results above predate the fix.
 
 ## The gate decides (`flab gate`)
 
@@ -172,7 +223,8 @@ Reports: `artifacts/phase2_llm/report.md` (rules) and `artifacts/phase2_llm_tiny
 ## What the synthetic world can and cannot show
 
 The synthetic guidance sentences are templated, which is why rules reach a guidance F1 of 1.0 and why a small
-model has nothing to add there; tone is where rules struggle (F1 0.54). Real filings phrase guidance in far
-more ways, which is where a 3B to 8B fine tuned model is expected to earn its place. Those runs need a GPU and
-the frontier teacher needs an API key, so their results are deliberately not reported here; the commands
-above produce them, and the gate decides what ships.
+model has nothing to add there; tone is where rules struggle (F1 0.54) and where the frontier reference gains.
+Real filings phrase guidance in far more ways, which is where a 3B to 8B fine tuned model is expected to earn its
+place. That run needs a GPU and access to the model hub, neither of which this environment has; it is packaged as
+one GPU job (below) that trains, scores base, fine tuned and frontier systems on the gold set, gates the
+candidate and registers it.

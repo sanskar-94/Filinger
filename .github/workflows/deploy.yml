@@ -41,6 +41,13 @@ jobs:
           file: Dockerfile.vllm
           push: true
           tags: ${{ env.REGISTRY }}/filings-vllm:${{ github.sha }}
+      - name: Build and push training image (used by the on demand fine tune Job)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.train
+          push: true
+          tags: ${{ env.REGISTRY }}/filings-train:${{ github.sha }}
 
   deploy:
     needs: build

@@ -49,6 +49,16 @@ class LoraTrainConfig:
         return cls(**data)
 
 
+def _reporters(report_to: list[str]) -> list[str]:
+    """MLflow only when a tracking server is configured, as everywhere else in the lab: without one, the
+    transformers callback falls back to a local store that may not support the registry and stops the run."""
+    from .. import tracking
+
+    if "mlflow" in report_to and not tracking.mlflow_enabled():
+        report_to = [r for r in report_to if r != "mlflow"] or ["none"]
+    return report_to
+
+
 def _dtype_kwarg() -> str:
     """transformers 5 renamed ``torch_dtype`` to ``dtype``."""
     import inspect
@@ -132,7 +142,7 @@ def train(cfg: LoraTrainConfig, data_dir: str, out_dir: str) -> dict:
         save_total_limit=2,
         load_best_model_at_end=has_val,
         metric_for_best_model="eval_loss" if has_val else None,
-        report_to=cfg.report_to,
+        report_to=_reporters(cfg.report_to),
         seed=cfg.seed,
     )))
     trainer = SFTTrainer(model=model, args=args, train_dataset=ds["train"],

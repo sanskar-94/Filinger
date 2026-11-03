@@ -17,13 +17,20 @@ def _inputs(lake: str, budget: int):
 
 
 def make_system(spec: str, style: str = "full"):
-    """rules | frontier[:model] | vllm:<base_url>|<model>[|guided] | hf:<model_path>[|<adapter_path>][@name]"""
-    from .providers import AnthropicExtractor, HFExtractor, OpenAICompatExtractor, RuleExtractor
+    """rules | frontier[:model] | vllm:<base_url>|<model>[|guided] | hf:<model_path>[|<adapter_path>] |
+    replay:<labels.jsonl>, each optionally followed by @name.
+
+    ``replay`` scores labels produced elsewhere (an annotator, a batch API results file): one JSON object per line
+    with ``accession`` and ``signals``."""
+    from .providers import AnthropicExtractor, HFExtractor, LabelExtractor, OpenAICompatExtractor, RuleExtractor
 
     spec, _, label = spec.partition("@")
     kind, _, rest = spec.partition(":")
     if kind == "rules":
         return RuleExtractor()
+    if kind == "replay":
+        rows = [json.loads(x) for x in Path(rest).read_text().splitlines() if x.strip()]
+        return LabelExtractor({r["accession"]: r["signals"] for r in rows if r.get("signals")}, name=label or "replay")
     if kind == "frontier":
         return AnthropicExtractor(model=rest) if rest else AnthropicExtractor()
     if kind == "vllm":

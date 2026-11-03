@@ -112,6 +112,13 @@ flab gate --extractor-eval artifacts/phase3_tiny/eval.json --system tiny-lora-ch
 flab llm-serve --base artifacts/tiny-base --adapter filings-extractor=artifacts/lora/tiny-champion/adapter
 ```
 
+On one 24 GB GPU, the whole phase with Qwen2.5 3B (labels, fine tune, evaluation of base, fine tuned, frontier
+and production, gate, registration):
+
+```bash
+bash scripts/gpu_finetune.sh
+```
+
 ## Running on real data
 
 ```bash
@@ -145,9 +152,11 @@ be executed and checked against the truth. Its results validate the machinery, n
 filings, published work suggests out of sample AUC around 0.52 to 0.55; the lab treats anything above 0.65 as
 a leakage bug until proven otherwise. The LLM method was run for real on a 5.2M parameter model pretrained
 from scratch on a CPU: fine tuning took schema valid output from 0% to 100% on 400 gold filings, but a model
-that small scores 0.38 against the rules' 0.85, so the gate keeps the rules in production. Results for a 3B to
-8B fine tuned model and for the frontier teacher need a GPU and an API key and are not reported here; the
-commands that produce them are.
+that small scores 0.38 against the rules' 0.85, so the gate keeps the rules in production. As the frontier
+reference, a frontier model labelled 60 gold filings blind and scored 0.909 against the rules' 0.859 on the same filings
+(paired bootstrap, 95% CI of the gain 0.006 to 0.162). The 3B to 8B fine tune needs a GPU and the model hub,
+which this environment does not have; it is one job (`scripts/gpu_finetune.sh`, `Dockerfile.train`, or the
+Kubernetes Job in `infra/k8s/jobs`) whose every step CI runs on the small model.
 
 ## Quality
 
