@@ -96,9 +96,22 @@ PyArrow's native S3 filesystem for the Parquet partitions, `AWS_ENDPOINT_URL` fo
 `tests/test_s3_storage.py` starts a moto server, uploads the raw filings, runs the pipeline, the feature build
 and the data quality gate against the bucket over HTTP, and requires every table to equal a local run.
 
-## Scale estimate
+## Scale: measured, then estimated
 
-3,000 companies x 11 years gives roughly 3,000 x 11 x (1 + 3 + ~6) = 330k filings. At 8 requests per
-second the download takes about 11.5 hours once (resumable, cached). Parsing is about 20 ms per filing per
-core, so a 16 worker cluster with 8 cores each processes the corpus in well under an hour. Bulk
-`submissions.zip` replaces 3,000 index requests with one download.
+`scripts/bench_pipeline.py` runs both engines on a world five times the default size (300 companies, 2012 to
+2024) on four cores and checks that their outputs agree:
+
+| Engine | Filings | Seconds | Filings per second | Paragraphs per second | Raw MB per second |
+|---|---:|---:|---:|---:|---:|
+| local runner, 4 processes | 34,041 | 76.5 | 445 | 3,788 | 1.86 |
+| Spark local[4], session start included | 34,041 | 72.4 | 470 | 4,003 | 1.97 |
+
+Both wrote 289,765 paragraphs, and the row counts of every silver and gold table are identical; the 17 data
+quality checks pass on the lake Spark wrote. Spark's advantage is not speed on one machine (parsing is
+Python either way) but that the same job spreads over a cluster.
+
+Bytes are the honest basis for real data, since real filings are far longer than synthetic ones: at 0.49 MB
+of raw filing per core second, each terabyte needs about 560 core hours, about 9 hours on a 64 core EMR or
+Databricks cluster before I/O effects (conservative, because exhibits and XBRL are dropped early). For
+3,000 companies over 11 years, roughly 330k filings, the download at 8 requests per second takes about 11.5
+hours once (resumable, cached), and bulk `submissions.zip` replaces 3,000 index requests with one download.

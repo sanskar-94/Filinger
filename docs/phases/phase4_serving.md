@@ -98,19 +98,23 @@ generator's cap, the same kind of drift real 10-Ks show as risk sections lengthe
 
 ## Load test (`loadtest/locustfile.py`)
 
-The analyst request mix (scores, filing lookups, extraction, agent questions, health checks) against two
-uvicorn workers on the sandbox CPU, 40 concurrent users for 60 seconds:
+The analyst request mix (scores, filing lookups, extraction, agent questions, health checks) against the image
+that ships, run the way the cluster runs it: one uvicorn process, a 2 CPU limit, read only root filesystem,
+all capabilities dropped, non root; 40 concurrent users for 60 seconds:
 
 | Endpoint | Requests | Failures | Median | p95 | p99 |
 |---|---|---|---|---|---|
-| `POST /v1/score` | 1,543 | 0 | 21 ms | 61 ms | 95 ms |
-| `GET /v1/filings/{accession}` | 940 | 0 | 21 ms | 54 ms | 92 ms |
-| `POST /v1/extract` (rules fallback) | 617 | 0 | 5 ms | 30 ms | 47 ms |
-| `POST /v1/agent/ask` (offline agent) | 304 | 0 | 42 ms | 140 ms | 180 ms |
-| All | 3,705 | 0 | 19 ms | 61 ms | 110 ms |
+| `POST /v1/score` | 1,502 | 0 | 39 ms | 160 ms | 230 ms |
+| `GET /v1/filings/{accession}` | 885 | 0 | 41 ms | 170 ms | 230 ms |
+| `POST /v1/extract` (rules fallback) | 579 | 0 | 18 ms | 110 ms | 150 ms |
+| `POST /v1/agent/ask` (offline agent) | 306 | 0 | 73 ms | 350 ms | 490 ms |
+| All | 3,545 | 0 | 35 ms | 170 ms | 280 ms |
 
-About 63 requests per second without errors. With vLLM in the loop the extraction path is GPU bound and
-scales on queue depth through KEDA, which is why its autoscaling does not use CPU.
+About 60 requests per second per pod without errors, so the HPA target of 40 requests per second per pod
+leaves headroom. An earlier run with two workers in one container was faster at the tail (p95 61 ms) but its
+metrics depended on which worker answered the scrape; one process per pod and more pods is the trade. With
+vLLM in the loop the extraction path is GPU bound and scales on queue depth through KEDA, which is why its
+autoscaling does not use CPU.
 
 ## Kubernetes (`infra/k8s`, `infra/eks`)
 

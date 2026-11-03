@@ -5,7 +5,7 @@ synthetic world, with their outputs checked against each other.
     python scripts/bench_pipeline.py --engines spark --world data/synthetic_scale ...  # one engine
 
 Writes ``<out>/bench.json`` and ``<out>/bench.md``. Numbers are for this machine (``cpus`` in the output); the
-markdown also extrapolates the Spark rate per core to the full EDGAR workload so cluster sizing has a basis.
+markdown also turns the Spark rate per core into core hours per terabyte of raw filings, a basis for sizing a cluster.
 """
 from __future__ import annotations
 
@@ -17,9 +17,6 @@ import time
 from pathlib import Path
 
 import pandas as pd
-
-# 10-K, 10-Q and 8-K filings by US listed companies, 2014 to 2024, order of magnitude from the EDGAR full index
-EDGAR_FILINGS_2014_2024 = 1_300_000
 
 
 def _count(lake: Path) -> dict:
@@ -109,12 +106,14 @@ def render(r: dict) -> str:
         lines += ["", f"Row counts of silver/sections, silver/paragraphs and gold/events identical across engines: "
                       f"**{r['outputs_match']}**."]
     if "spark" in r["engines"]:
-        per_core = r["engines"]["spark"]["filings_per_core_s"]
-        core_hours = EDGAR_FILINGS_2014_2024 / per_core / 3600
-        lines += ["", f"Extrapolation: at {per_core} filings per core second, the ~{EDGAR_FILINGS_2014_2024:,} 10-K, 10-Q "
-                      f"and 8-K filings of 2014 to 2024 need about {core_hours:,.0f} core hours of parsing, roughly "
-                      f"{core_hours / 64:,.1f} hours on a 64 core EMR or Databricks cluster before I/O effects. Real "
-                      f"filings are several times longer than the synthetic ones, so budget accordingly."]
+        e = r["engines"]["spark"]
+        mb_core = e["raw_mb_per_s"] / r["cpus"]
+        tb_core_hours = 1e6 / mb_core / 3600
+        lines += ["", f"Parsing runs at {mb_core:.2f} MB of raw filing text per core second. Bytes, not filings, are the "
+                      f"guide for real data, whose filings are far longer than the synthetic ones (and carry exhibits "
+                      f"and XBRL the cleaner drops early, so this is conservative): each terabyte of raw filings needs "
+                      f"about {tb_core_hours:,.0f} core hours, about {tb_core_hours / 64:,.1f} hours on a 64 core EMR or "
+                      f"Databricks cluster before I/O effects."]
     return "\n".join(lines) + "\n"
 
 
