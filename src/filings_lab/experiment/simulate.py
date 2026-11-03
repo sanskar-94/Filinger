@@ -50,7 +50,7 @@ def simulate(service, n_users: int = 3000, mean_requests: float = 4.0, rating_ra
             if rng.random() < rating_rate:
                 p = 1 / (1 + np.exp(-(_logit(base_rates[out["variant"]]) + effect)))
                 expected[out["variant"]].append(p)
-                service.log.feedback(out["request_id"], 1 if rng.random() < p else -1, ts=ts + rng.uniform(5, 120))
+                service.feedback(out["request_id"], 1 if rng.random() < p else -1, ts=ts + rng.uniform(5, 120))
         if progress and (u + 1) % 500 == 0:
             print(f"{u + 1}/{n_users} users, {n_req} requests")
     truth = {v: float(np.mean(ps)) for v, ps in expected.items() if ps}

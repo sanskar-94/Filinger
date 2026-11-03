@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from .assign import Experiment
-from .log import EventLog
+from .log import load_frame
 
 
 def _write(df: pd.DataFrame, out: Path, name: str) -> Path:
@@ -82,7 +82,7 @@ def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: st
 
     # experiment
     exp = Experiment.load(experiment)
-    df = EventLog(db).frame(exp.name)
+    df = load_frame(db, exp.name)
     readout = json.loads(Path(readout_path).read_text()) if readout_path and Path(readout_path).exists() else None
     cut = (readout or {}).get("primary", {}).get("truncated_at_ts")
     if cut is not None:  # the test stopped at its maximum sample: report exactly the data the decision used
@@ -107,7 +107,7 @@ def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: st
         paths.append(_write(daily, out, "agg_ab_daily"))
     if readout is not None:
         r = readout
-        paths += _readout_tables(r, df, exp, out, Path(db))
+        paths += _readout_tables(r, df, exp, out, Path(db.split(',')[0]))
         p = r["primary"]
         rows = [{"metric": "thumbs_up_rate_diff", "estimate": p["diff"], "ci_low": p["ci_clustered"][0],
                  "ci_high": p["ci_clustered"][1], "p_value": p["p_value_clustered"], "method": "user clustered delta"},

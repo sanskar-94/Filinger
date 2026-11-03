@@ -91,6 +91,7 @@ resource "aws_ecr_repository" "images" {
   image_scanning_configuration { scan_on_push = true }
 }
 
+# API pods and the drift job: read the registry, adapters and lake; append experiment logs, nothing else.
 data "aws_iam_policy_document" "serving_read" {
   statement {
     actions = ["s3:GetObject", "s3:ListBucket"]
@@ -98,8 +99,12 @@ data "aws_iam_policy_document" "serving_read" {
       "arn:aws:s3:::filings-lab-${var.env}",
       "arn:aws:s3:::filings-lab-${var.env}/registry/*",
       "arn:aws:s3:::filings-lab-${var.env}/adapters/*",
-      "arn:aws:s3:::filings-lab-${var.env}/lake/gold/*",
+      "arn:aws:s3:::filings-lab-${var.env}/lake/*",
     ]
+  }
+  statement {
+    actions   = ["s3:PutObject"]
+    resources = ["arn:aws:s3:::filings-lab-${var.env}/experiments/events/*"]
   }
 }
 
@@ -120,6 +125,46 @@ module "serving_irsa" {
 resource "aws_iam_policy" "serving_read" {
   name   = "filings-lab-serving-read-${var.env}"
   policy = data.aws_iam_policy_document.serving_read.json
+}
+
+# Retraining and the A/B readout: read the lake and every replica's experiment log, write new registry
+# versions and readouts. Promotion to champion still goes through the reviewed model gate.
+data "aws_iam_policy_document" "trainer" {
+  statement {
+    actions = ["s3:GetObject", "s3:ListBucket"]
+    resources = [
+      "arn:aws:s3:::filings-lab-${var.env}",
+      "arn:aws:s3:::filings-lab-${var.env}/lake/*",
+      "arn:aws:s3:::filings-lab-${var.env}/registry/*",
+      "arn:aws:s3:::filings-lab-${var.env}/experiments/*",
+    ]
+  }
+  statement {
+    actions = ["s3:PutObject"]
+    resources = [
+      "arn:aws:s3:::filings-lab-${var.env}/registry/*",
+      "arn:aws:s3:::filings-lab-${var.env}/experiments/readouts/*",
+    ]
+  }
+}
+
+resource "aws_iam_policy" "trainer" {
+  name   = "filings-lab-trainer-${var.env}"
+  policy = data.aws_iam_policy_document.trainer.json
+}
+
+module "trainer_irsa" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.44"
+
+  role_name        = "filings-lab-trainer"
+  role_policy_arns = { trainer = aws_iam_policy.trainer.arn }
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["filings-lab:filings-lab-trainer"]
+    }
+  }
 }
 
 # GitHub Actions deploys through OIDC: no long lived AWS keys in the repository.

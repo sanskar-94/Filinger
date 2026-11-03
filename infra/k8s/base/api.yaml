@@ -15,11 +15,14 @@ spec:
       serviceAccountName: filings-lab
       securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
       initContainers:
-        - name: sync-artifacts  # pulls the registry and the gold feature tables the service reads
+        # the registry, the gold tables the scorer reads, and the index, paragraphs and prices the agent searches
+        # (silver/sections is only an input to the feature build, so it stays in S3)
+        - name: sync-artifacts
           image: amazon/aws-cli:2.27.0
-          command: ["sh", "-c", "aws s3 sync $MODEL_S3_PREFIX /data/registry && aws s3 sync $LAKE_S3_PREFIX /data/lake/gold"]
+          command: ["sh", "-c", "aws s3 sync $MODEL_S3_PREFIX /data/registry && aws s3 sync $LAKE_S3_PREFIX /data/lake --exclude 'silver/sections/*'"]
           envFrom: [{configMapRef: {name: filings-api}}]
           volumeMounts: [{name: data, mountPath: /data}]
+      terminationGracePeriodSeconds: 45  # room for the final experiment log upload on shutdown
       containers:
         - name: api
           image: filings-api:latest
@@ -28,6 +31,8 @@ spec:
           env:
             - name: FLAB_API_KEYS
               valueFrom: {secretKeyRef: {name: filings-api-keys, key: keys}}
+            - name: FLAB_REQUEST_SIGNING_KEY  # shared by all replicas: a rating may reach any of them
+              valueFrom: {secretKeyRef: {name: filings-api-keys, key: signing_key}}
           resources:
             requests: {cpu: 500m, memory: 1Gi}
             limits: {cpu: "2", memory: 2Gi}
@@ -36,9 +41,13 @@ spec:
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           volumeMounts:
             - {name: data, mountPath: /data, readOnly: true}
+            - {name: state, mountPath: /state}
+            - {name: experiment, mountPath: /config, readOnly: true}
             - {name: tmp, mountPath: /tmp}
       volumes:
         - {name: data, emptyDir: {}}
+        - {name: state, emptyDir: {}}  # survives container restarts; shipped to S3 before the pod goes away
+        - {name: experiment, configMap: {name: experiment-config}}
         - {name: tmp, emptyDir: {}}
       topologySpreadConstraints:
         - {maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: filings-api}}}

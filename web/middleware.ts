@@ -1,13 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { UID_COOKIE, UID_HEADER, isSecureRequest, isValidUid } from "./lib/uid";
 
-// A stable anonymous id per browser: the unit of randomisation for the A/B test (sticky assignment).
+// Gives every browser a stable anonymous id (the unit of randomisation for the A/B test) and forwards it to
+// the route handlers in a request header, including on the request that creates the cookie.
 export function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-  if (!req.cookies.get("flab_uid")) {
-    res.cookies.set("flab_uid", crypto.randomUUID(), {
+  const existing = req.cookies.get(UID_COOKIE)?.value;
+  const uid = isValidUid(existing) ? existing : crypto.randomUUID();
+  const headers = new Headers(req.headers);
+  headers.set(UID_HEADER, uid); // never trust a client supplied value
+  const res = NextResponse.next({ request: { headers } });
+  if (uid !== existing) {
+    res.cookies.set(UID_COOKIE, uid, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecureRequest(req.headers, req.nextUrl.protocol),
       maxAge: 60 * 60 * 24 * 365,
       path: "/",
     });

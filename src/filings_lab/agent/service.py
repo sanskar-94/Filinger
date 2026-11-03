@@ -1,7 +1,10 @@
 """Agent service: experiment assignment, per request tool box, agent run, exposure logging."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
+import secrets
 import uuid
 
 from ..experiment.assign import Experiment
@@ -23,6 +26,25 @@ class AgentService:
         self._extractors: dict[str, object] = {}
         self.serve_signals = True  # attach each variant's extractor to its tool box
         self.llm_base_url = os.environ.get("FLAB_LLM_BASE_URL", "")
+        # shared by every replica (a Kubernetes secret) so a rating can be accepted by any of them
+        self._signing_key = (os.environ.get("FLAB_REQUEST_SIGNING_KEY") or secrets.token_hex(32)).encode()
+
+    def _signature(self, rid: str) -> str:
+        return hmac.new(self._signing_key, rid.encode(), hashlib.sha256).hexdigest()[:24]
+
+    def new_request_id(self) -> str:
+        rid = uuid.uuid4().hex
+        return f"{rid}.{self._signature(rid)}"
+
+    def verify_request_id(self, request_id: str) -> bool:
+        rid, _, sig = request_id.partition(".")
+        return bool(rid and sig) and hmac.compare_digest(sig, self._signature(rid))
+
+    def feedback(self, request_id: str, rating: int, comment: str | None = None, ts: float | None = None) -> bool:
+        """Accept a rating for an answer this service issued, whichever replica served it."""
+        if self.log is None:
+            return False
+        return self.log.feedback(request_id, rating, comment, ts=ts, known=self.verify_request_id(request_id))
 
     def extractor_for(self, variant: str, cfg: dict):
         """The model version a variant serves: its LoRA adapter on vLLM when configured, rules otherwise."""
@@ -31,7 +53,8 @@ class AgentService:
 
             model = cfg.get("extractor_model")
             if self.llm_base_url and model:
-                self._extractors[variant] = OpenAICompatExtractor(self.llm_base_url, model, name=f"vllm:{model}", guided=True)
+                self._extractors[variant] = OpenAICompatExtractor(self.llm_base_url, model, name=f"vllm:{model}", guided=True,
+                                                                  style=os.environ.get("FLAB_LLM_PROMPT_STYLE", "full"))
             else:
                 self._extractors[variant] = RuleExtractor()
         return self._extractors[variant]
@@ -63,13 +86,18 @@ class AgentService:
                 ans.meta["fallback_from_error"] = True
         else:
             ans = ExtractiveAgent(tb, k=cfg.get("k", 4)).ask(question, ticker)
-        request_id = uuid.uuid4().hex
+        request_id = self.new_request_id()
+        # the configured model version, and how often it actually answered: a variant whose model keeps falling back
+        # to rules is not testing that model, and the readout has to be able to see it
+        extractions = {"n": len(tb.extraction_log), "fallbacks": sum(e["fallback"] for e in tb.extraction_log)}
         if self.log is not None:
             self.log.exposure(**({"ts": ts} if ts is not None else {}), request_id=request_id,
                               experiment=self.experiment.name if self.experiment else "none",
                               variant=variant, user_id=user_id, ticker=ticker, mode=ans.mode,
                               model_version=getattr(tb.extractor, "name", "rules"),
                               latency_s=ans.latency_s, n_citations=len(ans.citations),
-                              citation_valid_rate=ans.citation_valid_rate, cost_usd=ans.cost_usd, error=ans.error)
+                              citation_valid_rate=ans.citation_valid_rate, cost_usd=ans.cost_usd, error=ans.error,
+                              n_extractions=extractions["n"], n_extraction_fallbacks=extractions["fallbacks"])
         return {"request_id": request_id, "variant": variant,
-                "experiment": self.experiment.name if self.experiment else None, **ans.to_dict()}
+                "experiment": self.experiment.name if self.experiment else None, "extractions": extractions,
+                **ans.to_dict()}

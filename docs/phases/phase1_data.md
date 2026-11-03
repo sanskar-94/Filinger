@@ -90,6 +90,11 @@ spark-submit -m filings_lab.pipeline.spark_job --index ... --raw ... --prices ..
 Databricks: `infra/databricks/databricks.yml` (asset bundle: download, transform, features tasks).
 EMR: `infra/emr/run_pipeline.sh`. S3 bucket and IAM: `infra/aws/main.tf`.
 
+The single machine path runs on S3 too: every stage takes `s3://` paths (`storage.py`: boto3 for raw filings,
+PyArrow's native S3 filesystem for the Parquet partitions, `AWS_ENDPOINT_URL` for S3 compatible stores).
+`tests/test_s3_storage.py` starts a moto server, uploads the raw filings, runs the pipeline, the feature build
+and the data quality gate against the bucket over HTTP, and requires every table to equal a local run.
+
 ## Scale estimate
 
 3,000 companies x 11 years gives roughly 3,000 x 11 x (1 + 3 + ~6) = 330k filings. At 8 requests per

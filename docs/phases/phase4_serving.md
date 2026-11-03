@@ -28,8 +28,12 @@
 
 Resilience: the vLLM call sits behind a circuit breaker (opens after 5 consecutive failures, half opens after
 30 s). Errors, invalid JSON and an open breaker all fall back to the rule extractor, and the response carries
-`fallback: true`. Authentication is an `X-API-Key` header (keys from a Kubernetes secret). Metrics use route
-templates as labels, so per accession URLs do not explode cardinality.
+`fallback: true`. Every quote the model returns is checked against the paragraph it cites; the response lists
+each quote with `grounded` and the resolved `paragraph_id`, so a fabricated quote is never presented as
+evidence (`flab_extraction_quotes_total{grounded}` counts them). Authentication is an `X-API-Key` header (keys
+from a Kubernetes secret). Metrics use route templates as labels, so per accession URLs do not explode
+cardinality. The image runs one uvicorn process per container: counters, the breaker and the experiment log
+are per process, so pods scale through the HPA rather than workers inside a pod.
 
 ## Models and tracking
 
@@ -39,7 +43,39 @@ templates as labels, so per accession URLs do not explode cardinality.
    artefact: booster, feature list, training window, walk forward metrics and the reference distributions of
    the top features and of the prediction (for drift).
 3. The registry (`serving/registry.py`) resolves `models:/name@alias`. With an MLflow server it is the MLflow
-   Model Registry; otherwise a directory with the same alias semantics (synced to S3 in Kubernetes).
+   Model Registry; otherwise a directory with the same alias semantics (synced to S3 in Kubernetes). A file
+   registry version is staged and published with one rename, with permissions the non root API user can read.
+4. Fine tuned adapters are registered the same way (`flab llm-register`, model `filings-extractor`), logged
+   into their training run with the gold set scores and the gate outcome. Run against a real MLflow 3 server
+   here: `filings-reaction` v1 at `@champion`, and the two tiny adapters as `filings-extractor` v2 and v3, each
+   linked to its `phase3-lora` training run.
+
+## Serving the fine tuned model (measured here, `flab llm-serve`)
+
+vLLM needs a GPU, so `serving/llm_server.py` stands in for it on a CPU: the same OpenAI compatible routes
+(`/v1/models`, `/v1/chat/completions`), one base model with several named LoRA adapters switched per request,
+and vLLM's metric names (`vllm:num_requests_waiting`, `vllm:e2e_request_latency_seconds`, token counters), so
+the API, the KEDA trigger and the dashboards work unchanged against either.
+
+```bash
+flab llm-serve --base artifacts/tiny-base \
+  --adapter filings-extractor=artifacts/lora/tiny-champion/adapter \
+  --adapter filings-extractor-b=artifacts/lora/tiny-challenger/adapter --port 8000
+FLAB_LLM_BASE_URL=http://127.0.0.1:8000/v1 FLAB_LLM_PROMPT_STYLE=compact flab serve
+```
+
+What the run showed (`artifacts/phase4_llm_serving.json`):
+
+1. Parity: the champion served over HTTP scores exactly what the in process model scores on the 400 gold
+   filings (extraction score 0.3773, every field identical), at p50 0.39 s and p95 0.48 s per request on CPU.
+2. A/B routing: each experiment variant calls its own adapter, and the experiment log records the version per
+   request (variant A `vllm:filings-extractor`, variant B `vllm:filings-extractor-b`).
+3. It also showed why the configured version is not enough: the challenger never produces valid JSON, so every
+   B extraction was answered by the rules fallback while the log said B. Each exposure now records how many
+   extractions it made and how many fell back, and `flab_agent_extractions_total{variant,outcome}` shows it
+   live; a variant whose model keeps falling back is not testing that model.
+4. Breaker: with the LLM server stopped, seven requests in a row were all answered by the rules (no errors), the
+   breaker opened after five failures, and after the cooldown a probe on a real filing closed it again.
 
 ## Drift (`serving/drift.py`)
 
@@ -78,20 +114,33 @@ scales on queue depth through KEDA, which is why its autoscaling does not use CP
 
 ## Kubernetes (`infra/k8s`, `infra/eks`)
 
-1. API: non root, read only root filesystem, init container syncs the registry and gold tables from S3 via
-   IRSA, rolling updates with zero unavailable, PDB, zone spread, HPA on CPU and on requests per second (via
-   prometheus-adapter).
-2. vLLM: GPU node group (g6.xlarge, one L4) with a taint, init container syncs the champion and challenger
+1. API: non root (numeric UID 10001 in both images, so `runAsNonRoot` can be verified), read only root
+   filesystem, all capabilities dropped. An init container syncs the registry and the lake tables the scorer
+   and the agent read from S3 via IRSA. Rolling updates with zero unavailable, PDB, zone spread, HPA on CPU and
+   on requests per second (via prometheus-adapter). Both images were run locally with exactly these settings.
+2. Experiment log across replicas: each pod appends to its own SQLite file on a pod volume and ships a
+   consistent snapshot (SQLite online backup) to `s3://.../experiments/events/<pod>.db` every five minutes and
+   at shutdown. Request ids carry an HMAC from a shared secret, so a rating that reaches a different pod than
+   its answer is still accepted, and `flab ab-analyze --db s3://.../experiments/events/` joins every pod's
+   file. A daily CronJob writes the readout back to S3.
+3. The experiment definition is a ConfigMap generated from `configs/experiment.json`, and the cluster alert
+   rules are a PrometheusRule generated from `infra/monitoring/alerts.yml` (`scripts/render_k8s.py`); CI fails
+   if either copy is stale.
+4. Jobs that write results back to S3 pair the work container with an uploader that waits for the work
+   container's exit code and uploads only on success, so the Job reports the real outcome. The retraining Job
+   runs the data quality gate directly against the S3 lake.
+5. vLLM: GPU node group (g6.xlarge, one L4) with a taint, init container syncs the champion and challenger
    adapters, startup probe for model load, KEDA scaling on `vllm:num_requests_waiting` because CPU says
    nothing about a GPU server's load, NetworkPolicy so only the API and Prometheus can reach it.
-3. Terraform creates the VPC, EKS with both node groups, ECR repositories, the IRSA role and the GitHub OIDC
-   deploy role (no long lived keys).
+6. Terraform creates the VPC, EKS with both node groups, ECR repositories, two IRSA roles (serving: read the
+   registry and lake, append experiment logs; trainer: read the lake and logs, write registry versions and
+   readouts) and the GitHub OIDC deploy role (no long lived keys).
 
 ## CI/CD (`.github/workflows`)
 
 | Workflow | What it does |
 |---|---|
-| `ci.yml` | ruff, tests on Python 3.11 to 3.13, Spark parity tests with Java 17, LoRA smoke test on CPU torch, web lint, typecheck, tests and build, the end to end script, kubeconform on both rendered overlays, terraform fmt and validate |
+| `ci.yml` | ruff, tests on Python 3.11 to 3.13 (including the S3 lake tests against a moto server), Spark parity tests with Java 17, LoRA smoke and local LLM server tests on CPU torch, web lint, typecheck, tests and build, the end to end script, kubeconform on both rendered overlays, generated Kubernetes objects up to date, promtool config check and alert rule unit tests, terraform fmt and validate |
 | `model-gate.yml` | on changes to models, configs, features or training code: rebuilds the frozen evaluation world, runs the data quality gates, retrains the reaction model, evaluates the candidate extractor on the gold set (or a staging vLLM endpoint when `CANDIDATE_LLM_URL` is set) and runs `flab gate` against `models/production.json`; fails the PR if anything gated is worse |
 | `deploy.yml` | on main: builds and pushes both images tagged with the commit SHA, then a protected `production` environment applies the prod overlay, waits for rollouts and smoke tests `/readyz` |
 
@@ -103,9 +152,12 @@ p95 latency SLO of 8 s, and for the reaction model AUC, IC, and AUC significantl
 
 ```bash
 flab register --alias champion
-docker compose up --build              # API on :8080, Prometheus :9090, Grafana :3000, MLflow :5000
+docker compose up --build              # API :8080, web :3000, Prometheus :9090, Grafana :3001, MLflow :5000
 docker compose --profile gpu up        # adds vLLM on :8000 when an NVIDIA GPU is present
 ```
+
+Alert rules have unit tests (`infra/monitoring/alerts_test.yml`, run with `promtool test rules`): every alert
+must fire on a series that breaches it for longer than its hold time and stay silent on a healthy one.
 
 ## Runbook
 

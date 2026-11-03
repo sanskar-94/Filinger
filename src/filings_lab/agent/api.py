@@ -33,13 +33,17 @@ def build_router(service, auth, metrics) -> APIRouter:
         out = service.ask(req.question, req.ticker, req.user_id)
         metrics.ab_requests.labels(out.get("experiment") or "none", out["variant"]).inc()
         metrics.agent_citation_valid.labels(out["variant"]).observe(out["citation_valid_rate"])
+        ext = out.get("extractions") or {}
+        if ext.get("n"):
+            metrics.agent_extractions.labels(out["variant"], "fallback").inc(ext["fallbacks"])
+            metrics.agent_extractions.labels(out["variant"], "model").inc(ext["n"] - ext["fallbacks"])
         return out
 
     @r.post("/feedback")
     def feedback(req: FeedbackRequest):
         if req.rating not in (-1, 1):
             raise HTTPException(422, "rating must be 1 or -1")
-        if service.log is None or not service.log.feedback(req.request_id, req.rating, req.comment):
+        if not service.feedback(req.request_id, req.rating, req.comment):
             raise HTTPException(404, "unknown request_id")
         return {"ok": True}
 

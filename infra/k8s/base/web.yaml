@@ -10,7 +10,7 @@ spec:
     metadata:
       labels: {app: filings-web}
     spec:
-      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: web
           image: filings-web:latest
@@ -23,7 +23,14 @@ spec:
             requests: {cpu: 100m, memory: 192Mi}
             limits: {cpu: 500m, memory: 512Mi}
           readinessProbe: {httpGet: {path: /, port: http}, periodSeconds: 10}
-          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          livenessProbe: {httpGet: {path: /, port: http}, periodSeconds: 20, failureThreshold: 6}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: next-cache, mountPath: /app/.next/cache}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: next-cache, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
 ---
 apiVersion: v1
 kind: Service

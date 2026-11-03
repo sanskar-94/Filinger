@@ -41,10 +41,10 @@ def cmd_simulate(a):
 def cmd_analyze(a):
     from .analysis import analyze, render_markdown, save
     from .assign import Experiment
-    from .log import EventLog
+    from .log import load_frame
 
     exp = Experiment.load(a.experiment)
-    df = EventLog(a.db).frame(exp.name)
+    df = load_frame(a.db, exp.name)
     g = exp.guardrails if isinstance(exp.guardrails, dict) else None
     r = analyze(df, exp.name, {k: v.get("weight", 1.0) for k, v in exp.variants.items()}, planned_mde=a.mde, guardrails=g,
                 sequential=exp.analysis == "sequential", max_rated_per_arm=exp.max_rated_per_arm)
@@ -74,7 +74,9 @@ def _reg_plan(p):
 
 def _common(p):
     p.add_argument("--experiment", default="configs/experiment.json")
-    p.add_argument("--db", default="data/experiments.db")
+    p.add_argument("--db", default="data/experiments.db",
+                   help="event database: a path, a comma separated list, a glob, or an s3:// prefix ending in / "
+                        "holding one file per API replica")
 
 
 def _reg_sim(p):

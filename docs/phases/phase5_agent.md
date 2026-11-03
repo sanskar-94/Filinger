@@ -16,7 +16,7 @@ Tools (strict JSON schemas, `tools.py`):
 | `list_filings(ticker, form, limit)` | a company's filings with their 3 day abnormal return |
 | `get_price_history(ticker, start, end)` | return, drawdown, volatility, weekly closes |
 | `get_event_return(accession)` | day 0 return and CAR[0,+2] for one filing |
-| `extract_signals(accession)` | runs the extraction model this session serves (its A/B variant's LoRA adapter on vLLM, rules offline) and returns signals with quotes resolved to paragraph ids |
+| `extract_signals(accession)` | runs the extraction model this session serves (its A/B variant's LoRA adapter on vLLM, rules offline) and returns signals with quotes resolved to paragraph ids; only quotes the cited paragraph really contains become citable, and a fallback to rules is recorded per request |
 | `get_model_signal(accession)` | stored LLM signals and the reaction model's probability with drivers |
 
 Citation integrity: the tool box records every paragraph id it returns during a request. The validator
@@ -33,7 +33,9 @@ accounting. A scripted fake client tests the loop deterministically (`tests/test
 
 Offline mode: without an API key the service answers with `ExtractiveAgent`: the same retrieval and tools,
 quoting the most relevant sentence of each hit with its citation and the market reaction to the top filing.
-The service also falls back to it if the API errors.
+The service also falls back to it if the API errors. BM25 ranks on whichever query words it knows, so when a
+content word of the question appears in no indexed filing the answer says so first ("No indexed filing uses
+the term 'liquidity'") instead of presenting matches on the other words as an answer.
 
 ## API routes (mounted into the Phase 4 service)
 

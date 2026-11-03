@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -23,9 +24,13 @@ def features(small_world, small_lake):
     return build_features(sections, events, small_world["index"], small_world["facts"])
 
 
+ARTIFACT_DIR: dict = {}
+
+
 @pytest.fixture(scope="module")
 def model(features, tmp_path_factory):
     d = build_artifact(features, tmp_path_factory.mktemp("model"), num_rounds=50)
+    ARTIFACT_DIR["dir"] = d
     return ReactionModel.load(d)
 
 
@@ -77,6 +82,29 @@ def test_extract_falls_back_and_breaker_opens(model, features):
     assert "flab_llm_breaker_open 1.0" in metrics
 
 
+class QuotingExtractor(Extractor):
+    """An LLM that returns one real quote and one it made up."""
+    name = "llm"
+
+    def extract(self, inp):
+        sig = {"guidance_direction": "raised", "management_tone": "positive", "liquidity_concern": False,
+               "litigation_risk": False, "summary": "Guidance raised.",
+               "key_quotes": [{"paragraph": 2, "text": "we are RAISING our full-year guidance"},
+                              {"paragraph": 1, "text": "Zenith Brands issued a press release"}]}
+        return ExtractionResult("llm", inp.accession, json.dumps(sig), sig, True, True, None)
+
+
+def test_extract_flags_quotes_the_cited_paragraph_does_not_contain(model, features):
+    c = _client(model, features, extractor=QuotingExtractor())
+    body = {"paragraphs": [{"paragraph_id": "p-1", "section": "s", "text": "Revenue grew 12%."},
+                           {"paragraph_id": "p-2", "section": "s", "text": "We are raising our full year guidance."}]}
+    r = c.post("/v1/extract", json=body).json()
+    assert not r["fallback"] and r["quotes_grounded"] == 1
+    assert [(q["grounded"], q["paragraph_id"]) for q in r["quotes"]] == [(True, "p-2"), (False, None)]
+    metrics = c.get("/metrics").text
+    assert 'flab_extraction_quotes_total{grounded="false",system="llm"} 1.0' in metrics
+
+
 def test_circuit_breaker_half_opens():
     b = CircuitBreaker(failures=1, cooldown_s=0.0)
     b.record(False)
@@ -111,6 +139,28 @@ def test_file_registry_aliases(tmp_path):
         reg.resolve("models:/m@challenger")
 
 
+def test_file_registry_publishes_readable_versions(tmp_path):
+    """A version staged from a 700 temp dir must still be readable by the API's non root user, carry its own
+    version number in meta.json, and leave no staging directory behind."""
+    import os
+    import stat
+    import tempfile
+
+    reg = FileRegistry(tmp_path / "reg")
+    with tempfile.TemporaryDirectory(dir=tmp_path) as tmp:
+        assert stat.S_IMODE(os.stat(tmp).st_mode) == 0o700
+        (Path(tmp) / "model.txt").write_text("m")
+        (Path(tmp) / "meta.json").write_text(json.dumps({"feature_set": "all"}))
+        v = reg.register("m", tmp)
+    reg.set_alias("m", "champion", v)
+    vdir = reg.resolve("models:/m@champion")
+    assert stat.S_IMODE(os.stat(vdir).st_mode) == 0o755
+    assert stat.S_IMODE(os.stat(vdir / "model.txt").st_mode) == 0o644
+    assert json.loads((vdir / "meta.json").read_text())["version"] == v
+    assert stat.S_IMODE(os.stat(tmp_path / "reg" / "m" / "aliases.json").st_mode) == 0o644
+    assert not [p for p in (tmp_path / "reg" / "m").iterdir() if p.name.startswith(".")]
+
+
 def test_gate_cli_exit_codes(tmp_path):
     prod = {"extractor": {"metrics": {"extraction_score": 0.80, "schema_valid_rate": 1.0}},
             "reaction_model": {"metrics": {"auc": 0.55, "ic": 0.05}}}
@@ -128,6 +178,32 @@ def test_gate_cli_exit_codes(tmp_path):
     out = run("bad.json")
     assert out.returncode == 1 and "extraction_score" in out.stdout
 
+    # a candidate scored on a different number of gold items than production is refused, however good it looks
+    prod["extractor"]["gold_limit"] = 400
+    (tmp_path / "prod.json").write_text(json.dumps(prod))
+    (tmp_path / "other.json").write_text(json.dumps({"summary": {"cand": {**good["summary"]["cand"], "n": 300}}}))
+    (tmp_path / "same.json").write_text(json.dumps({"summary": {"cand": {**good["summary"]["cand"], "n": 400}}}))
+    out = run("other.json")
+    assert out.returncode == 1 and "--limit 400" in out.stdout
+    assert run("same.json").returncode == 0
+
+    # with a fingerprint on record, the same size is not enough: the inputs and labels must be the same
+    prod["extractor"].update(gold_sha256="a" * 64, system="rules")
+    (tmp_path / "prod.json").write_text(json.dumps(prod))
+    (tmp_path / "fp.json").write_text(json.dumps({"summary": {"cand": {**good["summary"]["cand"], "n": 400}},
+                                                  "gold": {"n": 400, "sha256": "b" * 64}}))
+    assert run("fp.json").returncode == 1
+    # production scored in the same run is the baseline, whatever production.json recorded elsewhere
+    same_run = {"summary": {"cand": {"extraction_score": 0.62, "schema_valid_rate": 1.0, "n": 400},
+                            "rules": {"extraction_score": 0.60, "schema_valid_rate": 1.0, "n": 400}},
+                "gold": {"n": 400, "sha256": "b" * 64}}
+    (tmp_path / "same_run.json").write_text(json.dumps(same_run))
+    out = run("same_run.json")
+    assert out.returncode == 0 and "same evaluation run" in out.stdout
+    same_run["summary"]["cand"]["extraction_score"] = 0.55
+    (tmp_path / "same_run.json").write_text(json.dumps(same_run))
+    assert run("same_run.json").returncode == 1
+
 
 def test_batch_drift_report(model, features):
     from filings_lab.serving.drift_report import drift_report, render
@@ -144,3 +220,22 @@ def test_batch_drift_report(model, features):
     rep2 = drift_report(model, shifted, since)
     assert rep2["retrain_recommended"] and top in rep2["breached"]
     assert "Retraining recommended" in render(rep2)
+
+
+def test_mlflow_registry_round_trip(model, features, tmp_path, monkeypatch):
+    pytest.importorskip("mlflow.pyfunc")
+    pytest.importorskip("sqlalchemy")
+    pytest.importorskip("alembic")
+    import mlflow
+
+    from filings_lab.serving.registry import MlflowRegistry
+
+    monkeypatch.chdir(tmp_path)
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+    reg = MlflowRegistry()
+    v = reg.register("filings-reaction-test", ARTIFACT_DIR["dir"], metrics={"auc": 0.56})
+    reg.set_alias("filings-reaction-test", "champion", v)
+    assert reg.describe("models:/filings-reaction-test@champion")["version"] == v
+    loaded = ReactionModel.load(reg.resolve("models:/filings-reaction-test@champion"))
+    acc = features["accession"].iloc[-1]
+    assert loaded.predict(features[features["accession"] == acc])[0] == pytest.approx(model.predict(features[features["accession"] == acc])[0])

@@ -112,6 +112,14 @@ def test_extractive_agent_answers_with_valid_citations(store, index):
     assert all(c.ticker == t for c in ans.citations)
 
 
+def test_extractive_agent_says_when_a_term_is_not_in_any_filing(store, index):
+    assert index.unknown_terms("What about zyxwvut and guidance?") == ["zyxwvut"]
+    assert index.unknown_terms("guidance outlook") == []
+    ans = ExtractiveAgent(ToolBox(store, index)).ask("What did management say about zyxwvut guidance?")
+    assert ans.answer.startswith("No indexed filing uses the term 'zyxwvut'")
+    assert ans.citations and ans.citation_valid_rate == 1.0
+
+
 def test_assignment_is_sticky_balanced_and_independent():
     a = Experiment("x", "salt-a", {"A": {"weight": 0.5}, "B": {"weight": 0.5}})
     b = Experiment("y", "salt-b", {"A": {"weight": 0.5}, "B": {"weight": 0.5}})
@@ -133,6 +141,58 @@ def test_event_log(tmp_path):
     assert log.feedback("r1", 1) and not log.feedback("missing", 1)
     df = log.frame("x")
     assert len(df) == 1 and df["rating"].iloc[0] == 1
+
+
+def test_feedback_reaching_another_replica_is_kept_and_joined(store, tmp_path, monkeypatch):
+    """Two API replicas, each with its own log: a rating that lands on the other replica is accepted because the
+    request id is signed, a forged id is not, and the analysis joins the two logs back together."""
+    from filings_lab.agent.service import AgentService
+    from filings_lab.experiment.log import load_frame
+
+    monkeypatch.setenv("FLAB_REQUEST_SIGNING_KEY", "shared-secret")
+    exp = Experiment("x", "s", {"A": {"weight": 0.5}, "B": {"weight": 0.5}})
+    pod_a = AgentService(store, exp, EventLog(tmp_path / "pod-a.db"), mode="offline")
+    pod_b = AgentService(store, exp, EventLog(tmp_path / "pod-b.db"), mode="offline")
+    out = pod_a.ask("revenue guidance outlook", user_id="u1")
+    rid, _, sig = out["request_id"].partition(".")
+    assert pod_b.verify_request_id(out["request_id"]) and len(sig) == 24
+    assert pod_b.feedback(out["request_id"], 1)
+    assert not pod_b.feedback(f"{rid}.{'0' * 24}", 1) and not pod_b.feedback("nope", 1)
+    assert EventLog(tmp_path / "pod-a.db").frame("x")["rating"].isna().all()  # the rating is not in pod a's file
+    merged = load_frame(f"{tmp_path}/pod-*.db", "x")
+    assert len(merged) == 1 and merged["rating"].iloc[0] == 1
+    assert list(merged.columns) == list(EventLog(tmp_path / "pod-a.db").frame("x").columns)
+    monkeypatch.setenv("FLAB_REQUEST_SIGNING_KEY", "another-secret")
+    other_key = AgentService(store, exp, EventLog(tmp_path / "pod-c.db"), mode="offline")
+    assert not other_key.feedback(out["request_id"], 1)
+
+
+def test_event_log_snapshot_is_a_consistent_copy(tmp_path):
+    log = EventLog(tmp_path / "live.db")
+    for i in range(50):
+        log.exposure(request_id=f"r{i}", experiment="x", variant="AB"[i % 2], user_id=f"u{i % 7}")
+    log.feedback("r3", -1)
+    log.snapshot(str(tmp_path / "exports" / "pod-0.db"))
+    copy = EventLog(tmp_path / "exports" / "pod-0.db").frame("x")
+    assert len(copy) == 50 and copy.set_index("request_id").loc["r3", "rating"] == -1
+
+
+def test_api_ships_its_event_log_at_shutdown(store, tmp_path):
+    import socket
+
+    from fastapi.testclient import TestClient
+
+    from filings_lab.agent.service import AgentService
+    from filings_lab.serving.app import ServiceConfig, create_app
+
+    exp = Experiment("x", "s", {"A": {"weight": 0.5}, "B": {"weight": 0.5}})
+    svc = AgentService(store, exp, EventLog(tmp_path / "live.db"), mode="offline")
+    cfg = ServiceConfig(lake=str(tmp_path / "nolake"), event_export=str(tmp_path / "exports"), event_export_seconds=3600)
+    with TestClient(create_app(cfg, model=None, agent_service=svc)) as c:
+        rid = c.post("/v1/agent/ask", json={"question": "revenue guidance outlook", "user_id": "u9"}).json()["request_id"]
+        assert c.post("/v1/feedback", json={"request_id": rid, "rating": -1}).json() == {"ok": True}
+    shipped = EventLog(tmp_path / "exports" / f"{socket.gethostname()}.db").frame("x")
+    assert shipped["request_id"].tolist() == [rid] and shipped["rating"].iloc[0] == -1
 
 
 def test_agent_routes(store, tmp_path, monkeypatch):
@@ -181,6 +241,41 @@ def test_each_variant_serves_its_own_model_version(store, tmp_path, monkeypatch)
     assert sent == ["filings-extractor", "filings-extractor-b"]
     logged = svc.log.frame("x").sort_values("variant")["model_version"].tolist()
     assert logged == ["vllm:filings-extractor", "vllm:filings-extractor-b"]
+
+
+def test_a_variant_whose_model_falls_back_is_logged_as_such(store, tmp_path, monkeypatch):
+    """Variant B's model returns invalid JSON, so the rules answer instead. The exposure must say so: otherwise the
+    experiment silently compares A's model with the rules while claiming to test B's model."""
+    from filings_lab.agent.service import AgentService
+
+    class FakeVllm:
+        def post(self, url, json, timeout):
+            if json["model"] == "filings-extractor-b":
+                content = "Revenue guidance for the year is"  # never reaches a JSON object
+            else:
+                import json as _j
+                content = _j.dumps({"guidance_direction": "raised", "management_tone": "positive",
+                                    "liquidity_concern": False, "litigation_risk": False, "summary": "s",
+                                    "key_quotes": [{"paragraph": 1, "text": "a sentence that is not in the filing"}]})
+            return SimpleNamespace(raise_for_status=lambda: None,
+                                   json=lambda: {"choices": [{"message": {"content": content}}], "usage": {}})
+
+    monkeypatch.setenv("FLAB_LLM_BASE_URL", "http://vllm:8000/v1")
+    exp = Experiment("x", "s", {"A": {"weight": 0.5, "extractor_model": "filings-extractor"},
+                                 "B": {"weight": 0.5, "extractor_model": "filings-extractor-b"}})
+    svc = AgentService(store, exp, EventLog(tmp_path / "e.db"), mode="offline")
+    for v in ("A", "B"):
+        svc.extractor_for(v, exp.config(v)).session = FakeVllm()
+    users = {exp.assign(f"user-{i}"): f"user-{i}" for i in range(50)}
+    t = store.index["ticker"].iloc[0]
+    outs = {v: svc.ask("Did the company change its guidance?", t, user) for v, user in sorted(users.items())}
+    assert outs["A"]["extractions"] == {"n": 1, "fallbacks": 0}
+    assert outs["B"]["extractions"] == {"n": 1, "fallbacks": 1}
+    df = svc.log.frame("x").set_index("variant")
+    assert df.loc["B", "n_extraction_fallbacks"] == 1 and df.loc["A", "n_extraction_fallbacks"] == 0
+    # A's quote is not in the paragraph it cites, so it never becomes a citable id
+    sig = json.loads(svc.toolbox_for("A", exp.config("A")).execute("extract_signals", {"accession": outs["A"]["tool_calls"][1]["input"]["accession"]}))
+    assert sig["quotes"] == [] and not sig["fallback"]
 
 
 def test_event_log_migrates_old_schema(tmp_path):

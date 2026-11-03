@@ -5,9 +5,17 @@ metadata:
 data:
   FLAB_MODEL_URI: models:/filings-reaction@champion
   FLAB_REGISTRY: /data/registry
+  FLAB_LAKE: /data/lake
   FLAB_FEATURES: /data/lake/gold/features
   FLAB_SIGNALS: /data/lake/gold/llm_signals.parquet
   FLAB_LLM_BASE_URL: http://vllm.filings-lab.svc.cluster.local:8000/v1
   FLAB_LLM_MODEL: filings-extractor
+  FLAB_LLM_PROMPT_STYLE: compact
+  FLAB_EXPERIMENT: /config/experiment.json
+  # each replica appends to its own SQLite log on a pod volume and ships a snapshot here every 5 minutes and
+  # at shutdown; ab-analyze reads the union (one file per pod)
+  FLAB_EVENT_DB: /state/experiments.db
+  FLAB_EVENT_EXPORT: s3://filings-lab-prod/experiments/events
+  FLAB_EVENT_EXPORT_SECONDS: "300"
   MODEL_S3_PREFIX: s3://filings-lab-prod/registry
-  LAKE_S3_PREFIX: s3://filings-lab-prod/lake/gold
+  LAKE_S3_PREFIX: s3://filings-lab-prod/lake

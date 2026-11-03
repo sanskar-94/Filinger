@@ -13,4 +13,5 @@ patches:
   - target: {kind: ConfigMap, name: filings-api}
     patch: |-
       - {op: replace, path: /data/MODEL_S3_PREFIX, value: s3://filings-lab-dev/registry}
-      - {op: replace, path: /data/LAKE_S3_PREFIX, value: s3://filings-lab-dev/lake/gold}
+      - {op: replace, path: /data/LAKE_S3_PREFIX, value: s3://filings-lab-dev/lake}
+      - {op: replace, path: /data/FLAB_EVENT_EXPORT, value: s3://filings-lab-dev/experiments/events}

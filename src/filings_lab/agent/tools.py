@@ -95,9 +95,11 @@ class ToolBox:
         self.diversify = diversify
         self.extractor = extractor  # the model version this session serves (A/B variant), optional
         self.seen_ids: set[str] = set()
+        self.extraction_log: list[dict] = []  # what actually served each extract_signals call this request
 
     def reset(self) -> None:
         self.seen_ids = set()
+        self.extraction_log = []
 
     def execute(self, name: str, args: dict) -> str:
         fn = getattr(self, f"t_{name}", None)
@@ -175,6 +177,7 @@ class ToolBox:
         from ..llm.dataset import TEXT_SECTIONS
         from ..llm.prompts import ExtractionInput, select_paragraphs
         from ..llm.providers import RuleExtractor
+        from ..llm.schema import quote_is_grounded
 
         p = self.store.paragraphs
         rows = p[(p["accession"] == accession) & p["section"].isin(TEXT_SECTIONS)].sort_values(["section", "para_idx"])
@@ -187,11 +190,13 @@ class ToolBox:
         fallback = False
         if not res.schema_valid and not isinstance(ex, RuleExtractor):
             res, fallback = RuleExtractor().extract(inp), True
+        self.extraction_log.append({"configured": getattr(ex, "name", "rules"), "served": res.system, "fallback": fallback})
         sig = res.signals or {}
         quotes = []
         for q in sig.get("key_quotes", []):
-            k = q.get("paragraph", 0) - 1
-            if 0 <= k < len(paras):
+            # only a quote its paragraph really contains becomes citable; a fabricated one is dropped here
+            if quote_is_grounded(q, paras):
+                k = int(q["paragraph"]) - 1
                 self.seen_ids.add(paras[k]["paragraph_id"])
                 quotes.append({"paragraph_id": paras[k]["paragraph_id"], "text": q.get("text", "")})
         return {"accession": accession, "model": res.system, "fallback": fallback,

@@ -162,19 +162,22 @@ def check_features(features: pd.DataFrame) -> list[Check]:
 
 
 def run_checks(lake: str) -> list[Check]:
+    """Checks every table present in the lake, local or s3://."""
+    from .. import storage
+
     lake = lake.rstrip("/")
-    idx = pd.read_parquet(f"{lake}/bronze_index.parquet")
+    idx = storage.read_parquet(f"{lake}/bronze_index.parquet")
     checks = check_index(idx)
     secs = f"{lake}/silver/sections"
-    if Path(secs).exists():
-        checks += check_sections(idx, pd.read_parquet(secs))
-        checks += check_paragraphs(pd.read_parquet(f"{lake}/silver/paragraphs"))
-    if Path(f"{lake}/silver/prices.parquet").exists():
-        checks += check_prices(pd.read_parquet(f"{lake}/silver/prices.parquet"))
-    if Path(f"{lake}/gold/events").exists():
-        checks += check_events(idx, pd.read_parquet(f"{lake}/gold/events"))
-    if Path(f"{lake}/gold/features").exists():
-        checks += check_features(pd.read_parquet(f"{lake}/gold/features"))
+    if storage.exists(secs):
+        checks += check_sections(idx, storage.read_parquet(secs))
+        checks += check_paragraphs(storage.read_parquet(f"{lake}/silver/paragraphs"))
+    if storage.exists(f"{lake}/silver/prices.parquet"):
+        checks += check_prices(storage.read_parquet(f"{lake}/silver/prices.parquet"))
+    if storage.exists(f"{lake}/gold/events"):
+        checks += check_events(idx, storage.read_parquet(f"{lake}/gold/events"))
+    if storage.exists(f"{lake}/gold/features"):
+        checks += check_features(storage.read_parquet(f"{lake}/gold/features"))
     return checks
 
 

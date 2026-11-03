@@ -199,7 +199,12 @@ class ExtractiveAgent:
             return AgentAnswer("No filing paragraphs matched the question.", [], [], calls, "offline-extractive",
                                1, time.perf_counter() - t0)
         terms = {t for t in re.findall(r"[a-z]{4,}", question.lower())}
-        lines = [f"Most relevant passages{f' for {ticker}' if ticker else ''}:"]
+        missing = self.tb.index.unknown_terms(question)
+        lines = []
+        if missing:
+            lines.append(f"No indexed filing uses the term{'s' if len(missing) > 1 else ''} "
+                         f"{', '.join(repr(m) for m in missing)}; these passages only match the other words of the question.")
+        lines.append(f"Most relevant passages{f' for {ticker}' if ticker else ''}:")
         for n, r in enumerate(res, start=1):
             sents = re.split(r"(?<=[.!?])\s+", r["text"])
             best = max(sents, key=lambda s: len(terms & set(re.findall(r"[a-z]{4,}", s.lower()))))

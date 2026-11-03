@@ -1,0 +1,125 @@
+# promtool unit tests for alerts.yml: each alert must fire on a series that breaches it for longer than its
+# "for" window, and stay silent on a healthy one.
+#   docker run --rm --entrypoint /bin/promtool -v $PWD/infra/monitoring:/m:ro prom/prometheus:v3.5.0 test rules /m/alerts_test.yml
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+
+tests:
+  # 5% of requests fail for 20 minutes: pages after the 10 minute hold
+  - interval: 1m
+    input_series:
+      - series: 'flab_requests_total{route="/v1/score",status="200"}'
+        values: '0+95x30'
+      - series: 'flab_requests_total{route="/v1/score",status="500"}'
+        values: '0+5x30'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: ApiHighErrorRate
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ApiHighErrorRate
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations: {summary: "More than 2% of API requests fail"}
+
+  # 1% errors stays quiet
+  - interval: 1m
+    input_series:
+      - series: 'flab_requests_total{route="/v1/score",status="200"}'
+        values: '0+99x30'
+      - series: 'flab_requests_total{route="/v1/score",status="500"}'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: ApiHighErrorRate
+        exp_alerts: []
+
+  # every extraction lands in the 10s bucket: p95 above 8s
+  - interval: 1m
+    input_series:
+      - series: 'flab_request_latency_seconds_bucket{route="/v1/extract",le="1"}'
+        values: '0x30'
+      - series: 'flab_request_latency_seconds_bucket{route="/v1/extract",le="5"}'
+        values: '0x30'
+      - series: 'flab_request_latency_seconds_bucket{route="/v1/extract",le="10"}'
+        values: '0+10x30'
+      - series: 'flab_request_latency_seconds_bucket{route="/v1/extract",le="+Inf"}'
+        values: '0+10x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ApiLatencyP95High
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations: {summary: "Extraction p95 latency above 8s"}
+
+  # a quarter of extractions served by the rules: the LLM path is unhealthy
+  - interval: 1m
+    input_series:
+      - series: 'flab_extractions_total{outcome="valid",system="vllm"}'
+        values: '0+30x60'
+      - series: 'flab_extractions_total{outcome="fallback",system="rules"}'
+        values: '0+10x60'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExtractionFallbackRateHigh
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: ExtractionFallbackRateHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations: {summary: "More than 10% of extractions served by the rule fallback (LLM unhealthy or invalid JSON)"}
+
+  # breaker opens at minute 3 and stays open
+  - interval: 1m
+    input_series:
+      - series: 'flab_llm_breaker_open{pod="api-0"}'
+        values: '0 0 0 1 1 1 1 1 1 1 1 1 1'
+      - series: 'flab_llm_breaker_open{pod="api-1"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LlmCircuitBreakerOpen
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: LlmCircuitBreakerOpen
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations: {summary: "LLM circuit breaker open: vLLM unreachable or failing"}
+
+  # one feature drifts, one does not; the prediction distribution moves too
+  - interval: 5m
+    input_series:
+      - series: 'flab_feature_psi{feature="fin_size_rank",pod="api-0"}'
+        values: '0.31x30'
+      - series: 'flab_feature_psi{feature="tone_net",pod="api-0"}'
+        values: '0.05x30'
+      - series: 'flab_feature_psi{feature="prediction",pod="api-0"}'
+        values: '0.22x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FeatureDriftHigh
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: FeatureDriftHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, feature: fin_size_rank}
+            exp_annotations: {summary: "PSI above 0.25 for fin_size_rank: retraining or investigation needed"}
+      - eval_time: 2h
+        alertname: PredictionDrift
+        exp_alerts:
+          - exp_labels: {severity: ticket, feature: prediction, pod: api-0}
+            exp_annotations: {summary: "Distribution of predicted probabilities moved away from training"}
+
+  # vLLM queue backlog across two replicas
+  - interval: 1m
+    input_series:
+      - series: 'vllm:num_requests_waiting{pod="vllm-0"}'
+        values: '15x12'
+      - series: 'vllm:num_requests_waiting{pod="vllm-1"}'
+        values: '9x12'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: VllmQueueBacklog
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations: {summary: "vLLM queue backlog: autoscaling may be stuck on GPU capacity"}

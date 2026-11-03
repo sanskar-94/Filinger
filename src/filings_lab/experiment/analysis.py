@@ -107,6 +107,7 @@ class Readout:
     power: dict
     decision: str
     reasons: list[str] = field(default_factory=list)
+    integrity: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return self.__dict__
@@ -212,13 +213,28 @@ def analyze(df: pd.DataFrame, experiment: str, weights: dict[str, float], contro
         if val["breached"]:
             reasons.append(f"guardrail breached: {name}")
 
+    # 3b. treatment integrity: a variant whose model keeps falling back to rules is not testing that model
+    integrity, min_share = {}, guardrails.get("model_served_share", {}).get("min", 0.95)
+    if {"n_extractions", "n_extraction_fallbacks"} <= set(df.columns):
+        for v in (control, treatment):
+            d = df[df["variant"] == v]
+            n = float(pd.to_numeric(d["n_extractions"], errors="coerce").fillna(0).sum())
+            fb = float(pd.to_numeric(d["n_extraction_fallbacks"], errors="coerce").fillna(0).sum())
+            if n > 0:
+                share = 1 - fb / n
+                integrity[v] = {"extractions": int(n), "served_by_variant_model": share, "min": min_share,
+                                "ok": share >= min_share}
+                if share < min_share:
+                    reasons.append(f"treatment integrity: variant {v}'s model answered only {share:.0%} of its "
+                                   f"extractions (minimum {min_share:.0%}), so the test does not measure that model")
+
     # 4. power and decision
     pw = {"planned_mde": planned_mde, "achieved_power_at_mde_iid": achieved_power(a["rated"], a["thumbs_up_rate"],
                                                                                   a["thumbs_up_rate"] + planned_mde, alpha)}
     pw["achieved_power_at_mde_clustered"] = achieved_power(int(a["rated"] / max(primary["design_effect"], 1)),
                                                            a["thumbs_up_rate"], a["thumbs_up_rate"] + planned_mde, alpha)
     lo, hi = primary["ci_clustered"]
-    if srm["mismatch"] or any(v["breached"] for v in g.values()):
+    if srm["mismatch"] or any(v["breached"] for v in g.values()) or not all(x["ok"] for x in integrity.values()):
         decision = "do not ship"
     elif sequential:
         cs_lo, cs_hi = primary["msprt_confidence_sequence"]
@@ -245,7 +261,7 @@ def analyze(df: pd.DataFrame, experiment: str, weights: dict[str, float], contro
     else:
         decision = "inconclusive"
         reasons.append(f"CI includes zero; power at the planned MDE was {pw['achieved_power_at_mde_clustered']:.0%}")
-    return Readout(experiment, control, treatment, srm, arms, primary, g, pw, decision, reasons)
+    return Readout(experiment, control, treatment, srm, arms, primary, g, pw, decision, reasons, integrity)
 
 
 def render_markdown(r: Readout) -> str:
@@ -278,6 +294,11 @@ def render_markdown(r: Readout) -> str:
     for k, v in r.guardrails.items():
         ci = f" (95% CI {v['ci'][0] * 100:+.1f}% to {v['ci'][1] * 100:+.1f}%)" if "ci" in v else ""
         lines.append(f"1. {k}: {v['estimate'] * 100:+.2f}%{ci}, limit {v['limit'] * 100:+.1f}%, {'BREACHED' if v['breached'] else 'ok'}")
+    if r.integrity:
+        lines += ["", "## Treatment integrity", ""]
+        for v, x in r.integrity.items():
+            lines.append(f"1. Variant {v}: {x['served_by_variant_model']:.1%} of {x['extractions']:,} extractions answered "
+                         f"by the variant's own model (minimum {x['min']:.0%}), {'ok' if x['ok'] else 'FAILED'}")
     lines += ["", "## Power", "", f"At the planned MDE of {r.power['planned_mde'] * 100:.1f} points: power "
               f"{r.power['achieved_power_at_mde_iid']:.0%} if answers were independent, "
               f"{r.power['achieved_power_at_mde_clustered']:.0%} after the design effect.", ""]

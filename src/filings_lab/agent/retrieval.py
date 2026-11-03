@@ -11,6 +11,9 @@ import pandas as pd
 from scipy import sparse
 
 TOKEN_PATTERN = r"(?u)\b[a-zA-Z][a-zA-Z\-]{1,}\b|\b\d+(?:\.\d+)?%?"
+# conversational words of a question that no filing would contain; not worth reporting as missing
+QUESTION_WORDS = frozenset("""did does doing say says said tell told talk talked mention mentioned explain explained
+describe described discuss discussed company companies filing filings management""".split())
 
 
 class BM25Index:
@@ -44,6 +47,14 @@ class BM25Index:
         if date_to:
             m &= dates <= np.datetime64(pd.Timestamp(date_to))
         return m
+
+    def unknown_terms(self, query: str) -> list[str]:
+        """Content words of the query that no indexed paragraph contains. BM25 silently ranks on the remaining
+        words, so callers use this to say so instead of presenting weak matches as an answer."""
+        analyzer = self.vec.build_analyzer()
+        vocab = self.vec.vocabulary_
+        return list(dict.fromkeys(t for t in analyzer(query)
+                                  if t not in vocab and t not in QUESTION_WORDS and not t[0].isdigit()))
 
     def search(self, query: str, k: int = 8, diversify: bool = True, **filters) -> pd.DataFrame:
         q = self.vec.transform([query])

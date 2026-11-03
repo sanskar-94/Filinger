@@ -1,4 +1,5 @@
-# Local production like stack: API, MLflow, Prometheus, Grafana; vLLM with the "gpu" profile.
+# Local production like stack: API :8080, web :3000, MLflow :5000, Prometheus :9090, Grafana :3001;
+# vLLM :8000 with the "gpu" profile.
 #   docker compose up --build                 # CPU only, rules fallback for extraction
 #   docker compose --profile gpu up --build   # adds vLLM (needs an NVIDIA GPU)
 services:
@@ -59,7 +60,7 @@ services:
     volumes:
       - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports: ["3000:3000"]
+    ports: ["3001:3000"]  # the web app has 3000
 volumes:
   state: {}
   mlflow: {}

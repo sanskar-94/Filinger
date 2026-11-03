@@ -4,7 +4,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from filings_lab.experiment.analysis import analyze, msprt_path, newcombe_diff, ratio_delta, two_proportion_z, wilson
+from filings_lab.experiment.analysis import (
+    analyze,
+    msprt_path,
+    newcombe_diff,
+    ratio_delta,
+    render_markdown,
+    two_proportion_z,
+    wilson,
+)
 from filings_lab.experiment.power import achieved_power, mde, n_continuous, n_per_arm, plan
 
 
@@ -119,3 +127,18 @@ def test_sequential_readout_stops_at_maximum_sample():
     assert r.primary["truncated_at_ts"] is not None
     assert min(r.arms["A"]["rated"], r.arms["B"]["rated"]) == cap
     assert r.decision in ("inconclusive", "ship treatment", "keep control")
+
+
+def test_readout_refuses_a_variant_whose_model_did_not_answer():
+    df = _log_frame(4000, 0.55, 0.65, seed=3)
+    df["n_extractions"] = 1
+    df["n_extraction_fallbacks"] = 0
+    ok = analyze(df, "x", {"A": 0.5, "B": 0.5})
+    assert ok.decision == "ship treatment" and ok.integrity["B"]["served_by_variant_model"] == 1.0
+    df.loc[df["variant"] == "B", "n_extraction_fallbacks"] = 1  # B's model always fell back to the rules
+    r = analyze(df, "x", {"A": 0.5, "B": 0.5})
+    assert r.decision == "do not ship" and not r.integrity["B"]["ok"]
+    assert any("treatment integrity" in x for x in r.reasons)
+    assert "## Treatment integrity" in render_markdown(r)
+    # logs without the columns (older deployments, offline simulations) are analysed as before
+    assert analyze(_log_frame(4000, 0.55, 0.65, seed=3), "x", {"A": 0.5, "B": 0.5}).integrity == {}

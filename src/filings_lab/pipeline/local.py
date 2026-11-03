@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -16,8 +15,7 @@ def _work(batch: pd.DataFrame):
 
 
 def write_partitioned(df: pd.DataFrame, path: str, partition_cols: list[str]) -> None:
-    Path(path).mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, partition_cols=partition_cols, index=False, existing_data_behavior="delete_matching")
+    storage.write_parquet(df, path, partition_cols)
 
 
 def run(index: pd.DataFrame, prices: pd.DataFrame, lake_root: str, workers: int = 4, market: str = "SPY") -> dict:
@@ -48,8 +46,7 @@ def run(index: pd.DataFrame, prices: pd.DataFrame, lake_root: str, workers: int 
 
     write_partitioned(sections, storage.join(lake_root, "silver", "sections"), ["form", "year"])
     write_partitioned(paragraphs, storage.join(lake_root, "silver", "paragraphs"), ["form", "year"])
-    Path(storage.join(lake_root, "silver")).mkdir(parents=True, exist_ok=True)
-    prices.to_parquet(storage.join(lake_root, "silver", "prices.parquet"), index=False)
-    index.to_parquet(storage.join(lake_root, "bronze_index.parquet"), index=False)
+    storage.write_parquet(prices, storage.join(lake_root, "silver", "prices.parquet"))
+    storage.write_parquet(index, storage.join(lake_root, "bronze_index.parquet"))
     write_partitioned(events, storage.join(lake_root, "gold", "events"), ["year"])
     return {"sections": len(sections), "paragraphs": len(paragraphs), "events": len(events)}

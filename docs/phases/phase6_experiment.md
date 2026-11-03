@@ -33,8 +33,18 @@ function matches statsmodels to the unit (tests).
 4. Guardrails: p95 latency change with a user cluster bootstrap interval, citation validity, cost.
 5. Achieved power at the planned MDE, independence and clustered, so an inconclusive result is read as
    "underpowered" or "no effect" correctly.
-6. Decision rule: do not ship on SRM or a breached guardrail; ship when the clustered interval is above zero;
-   keep control when it is below; otherwise inconclusive.
+6. Treatment integrity: each exposure records how many signal extractions it made and how many the rules
+   fallback answered. If a variant's own model answered less than 95% of its extractions, the test is not
+   measuring that model, and the readout says so and refuses to ship. This came out of running the real
+   adapters: the undertrained challenger never produced valid JSON, so every variant B extraction was really the
+   rules, while the configured version in the log said otherwise.
+7. Decision rule: do not ship on SRM, a breached guardrail or failed treatment integrity; ship when the
+   clustered interval is above zero; keep control when it is below; otherwise inconclusive.
+
+In a deployment each API replica keeps its own log and ships snapshots to S3; `flab ab-analyze --db
+s3://bucket/experiments/events/` reads every replica's file and joins exposures to ratings across them. Request
+ids are signed with a shared secret, so a rating that reaches a different replica than its answer is accepted
+and lands in the join instead of being rejected as unknown.
 
 Every method is checked against a published value or an independent computation: Wilson against Newcombe's
 (1998) worked example, Newcombe's interval against the same paper, the delta method against a cluster

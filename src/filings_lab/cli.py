@@ -41,14 +41,13 @@ def cmd_index(a):
 
 
 def cmd_download(a):
-    import pandas as pd
-
+    from . import storage
     from .edgar.client import EdgarClient
     from .edgar.download import download_filings
 
-    idx = pd.read_parquet(a.index)
+    idx = storage.read_parquet(a.index)
     out = download_filings(EdgarClient(), idx, a.raw, workers=a.workers)
-    out.to_parquet(a.index, index=False)
+    storage.write_parquet(out, a.index)
     print(out["download_status"].str.split(":").str[0].value_counts())
 
 
@@ -84,16 +83,15 @@ def cmd_facts(a):
 
 
 def cmd_local(a):
-    import pandas as pd
-
+    from . import storage
     from .pipeline import local
 
-    idx = pd.read_parquet(a.index)
+    idx = storage.read_parquet(a.index)
     if "raw_uri" not in idx.columns:
         from .edgar.download import raw_uri
 
         idx["raw_uri"] = [raw_uri(a.raw, c, acc) for c, acc in zip(idx["cik"], idx["accession"], strict=True)]
-    prices = pd.read_parquet(a.prices)
+    prices = storage.read_parquet(a.prices)
     print(local.run(idx, prices, a.lake, workers=a.workers, market=a.market))
 
 

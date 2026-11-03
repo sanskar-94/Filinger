@@ -5,19 +5,17 @@ from pathlib import Path
 
 
 def _run(a):
-    import pandas as pd
-
+    from .. import storage
     from .build import build_features
 
     lake = a.lake.rstrip("/")
-    sections = pd.read_parquet(f"{lake}/silver/sections")
-    events = pd.read_parquet(f"{lake}/gold/events")
-    index = pd.read_parquet(f"{lake}/bronze_index.parquet")
-    facts = pd.read_parquet(a.facts) if a.facts and Path(a.facts).exists() else None
+    sections = storage.read_parquet(f"{lake}/silver/sections")
+    events = storage.read_parquet(f"{lake}/gold/events")
+    index = storage.read_parquet(f"{lake}/bronze_index.parquet")
+    facts = storage.read_parquet(a.facts) if a.facts and storage.exists(a.facts) else None
     feats = build_features(sections, events.drop(columns=["year"], errors="ignore"), index, facts)
     out = f"{lake}/gold/features"
-    Path(out).mkdir(parents=True, exist_ok=True)
-    feats.to_parquet(out, partition_cols=["year"], index=False, existing_data_behavior="delete_matching")
+    storage.write_parquet(feats, out, ["year"])
     print(f"{len(feats)} rows x {feats.shape[1]} columns -> {out}")
 
 

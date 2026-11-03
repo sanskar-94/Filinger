@@ -15,6 +15,7 @@ pod is restarting.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from ..llm.prompts import ExtractionInput, select_paragraphs
 from ..llm.providers import Extractor, OpenAICompatExtractor, RuleExtractor
+from ..llm.schema import quote_is_grounded
 from .drift import DriftMonitor
 
 
@@ -38,9 +40,12 @@ class ServiceConfig:
     signals_path: str = field(default_factory=lambda: os.environ.get("FLAB_SIGNALS", "data/lake/gold/llm_signals.parquet"))
     llm_base_url: str = field(default_factory=lambda: os.environ.get("FLAB_LLM_BASE_URL", ""))
     llm_model: str = field(default_factory=lambda: os.environ.get("FLAB_LLM_MODEL", "filings-extractor"))
+    llm_prompt_style: str = field(default_factory=lambda: os.environ.get("FLAB_LLM_PROMPT_STYLE", "full"))
     api_keys: frozenset = field(default_factory=lambda: frozenset(
         k for k in os.environ.get("FLAB_API_KEYS", "").split(",") if k))
     lake: str = field(default_factory=lambda: os.environ.get("FLAB_LAKE", "data/lake"))
+    event_export: str = field(default_factory=lambda: os.environ.get("FLAB_EVENT_EXPORT", ""))
+    event_export_seconds: float = field(default_factory=lambda: float(os.environ.get("FLAB_EVENT_EXPORT_SECONDS", "300")))
     breaker_failures: int = 5
     breaker_cooldown_s: float = 30.0
     max_input_chars: int = 12_000
@@ -124,13 +129,27 @@ class Metrics:
         self.ab_requests = Counter("flab_ab_requests_total", "Agent requests by experiment variant", ["experiment", "variant"], registry=r)
         self.agent_citation_valid = Histogram("flab_agent_citation_valid_rate", "Share of valid citations per answer",
                                               ["variant"], registry=r, buckets=(0.5, 0.8, 0.9, 0.95, 0.99, 1.0))
+        self.event_exports = Counter("flab_event_exports_total", "Experiment log snapshots shipped to object storage",
+                                     ["outcome"], registry=r)
+        self.quotes = Counter("flab_extraction_quotes_total", "Extracted key quotes, by whether the cited paragraph "
+                              "contains them", ["system", "grounded"], registry=r)
+        self.agent_extractions = Counter("flab_agent_extractions_total", "Agent signal extractions by variant, answered "
+                                         "by the variant's model or by the rules fallback", ["variant", "outcome"], registry=r)
 
 
 # ------------------------------------------------------------------------------------------------ app
 def create_app(config: ServiceConfig | None = None, model=None, extractor: Extractor | None = None,
                feature_store: OfflineFeatureStore | None = None, agent_service=None) -> FastAPI:
     cfg = config or ServiceConfig()
-    app = FastAPI(title="Filings Intelligence Lab API", version="1.0.0")
+    shutdown_hooks: list = []
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app):
+        yield
+        for hook in shutdown_hooks:
+            hook()
+
+    app = FastAPI(title="Filings Intelligence Lab API", version="1.0.0", lifespan=lifespan)
     m = Metrics()
     state = {"model": model, "monitor": None}
     if state["model"] is None:
@@ -138,7 +157,10 @@ def create_app(config: ServiceConfig | None = None, model=None, extractor: Extra
             from .model import ReactionModel
             from .registry import get_registry
 
-            state["model"] = ReactionModel.load(get_registry().resolve(cfg.model_uri))
+            reg = get_registry()
+            state["model"] = ReactionModel.load(reg.resolve(cfg.model_uri))
+            if "version" not in state["model"].meta:  # MLflow artefacts do not carry their own version number
+                state["model"].meta["version"] = reg.describe(cfg.model_uri)["version"]
         except Exception as exc:  # noqa: BLE001 - readiness reports it
             state["load_error"] = str(exc)
     if state["model"] is not None:
@@ -146,7 +168,8 @@ def create_app(config: ServiceConfig | None = None, model=None, extractor: Extra
         state["monitor"] = DriftMonitor(mdl.reference)
         m.model_info.labels(mdl.version, mdl.meta.get("feature_set", ""), mdl.meta.get("trained_through", "")).set(1)
     store = feature_store or OfflineFeatureStore(cfg.features_path, cfg.signals_path)
-    primary = extractor or (OpenAICompatExtractor(cfg.llm_base_url, cfg.llm_model, name="llm", guided=True)
+    primary = extractor or (OpenAICompatExtractor(cfg.llm_base_url, cfg.llm_model, name="llm", guided=True,
+                                                  style=cfg.llm_prompt_style)
                             if cfg.llm_base_url else None)
     fallback = RuleExtractor()
     breaker = CircuitBreaker(cfg.breaker_failures, cfg.breaker_cooldown_s)
@@ -213,8 +236,17 @@ def create_app(config: ServiceConfig | None = None, model=None, extractor: Extra
             m.extractions.labels(fallback.name, "fallback" if used_fallback else "valid").inc()
         if state["monitor"] is not None and result.signals:
             state["monitor"].observe({"guidance_direction": result.signals["guidance_direction"]})
+        quotes = []
+        for q in (result.signals or {}).get("key_quotes", []):
+            ok = quote_is_grounded(q, inp.paragraphs)
+            k = int(q.get("paragraph", 0) or 0) - 1
+            m.quotes.labels(result.system, str(ok).lower()).inc()
+            quotes.append({**q, "grounded": ok,
+                           "paragraph_id": inp.paragraphs[k].get("paragraph_id") if ok else None})
         return {"accession": req.accession, "system": result.system, "fallback": used_fallback,
                 "signals": result.signals, "latency_s": round(result.latency_s, 4),
+                # each quote checked against the paragraph it cites: clients show only grounded ones as evidence
+                "quotes": quotes, "quotes_grounded": sum(q["grounded"] for q in quotes),
                 "paragraph_ids": [p.get("paragraph_id") for p in inp.paragraphs]}
 
     def _score(features: dict) -> dict:
@@ -260,8 +292,41 @@ def create_app(config: ServiceConfig | None = None, model=None, extractor: Extra
         from ..agent.api import build_router
 
         app.include_router(build_router(agent_service, auth, m))
+        if cfg.event_export and agent_service.log is not None:
+            shutdown_hooks.append(_start_event_export(agent_service.log, cfg, m))
     app.state.config, app.state.metrics, app.state.breaker, app.state.agent = cfg, m, breaker, agent_service
     return app
+
+
+def _start_event_export(log, cfg: ServiceConfig, m: Metrics):
+    """Ship a snapshot of this replica's experiment log every ``event_export_seconds`` and once more at shutdown,
+    to ``<event_export>/<hostname>.db``. Returns the shutdown hook."""
+    import socket
+    import threading
+
+    from .. import storage
+
+    dest = storage.join(cfg.event_export, f"{socket.gethostname()}.db")
+    stop = threading.Event()
+
+    def export_once():
+        try:
+            log.snapshot(dest)
+            m.event_exports.labels("ok").inc()
+        except Exception:  # noqa: BLE001 - a failed upload is retried on the next tick, never fails a request
+            m.event_exports.labels("error").inc()
+
+    def loop():
+        while not stop.wait(cfg.event_export_seconds):
+            export_once()
+
+    threading.Thread(target=loop, name="event-export", daemon=True).start()
+
+    def on_shutdown():
+        stop.set()
+        export_once()
+
+    return on_shutdown
 
 
 def _jsonable(v):
