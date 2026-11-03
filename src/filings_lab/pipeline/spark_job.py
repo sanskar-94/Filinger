@@ -137,6 +137,11 @@ def add_spark_labels(events):
 
 
 def run(index_path: str, raw_root: str, prices_path: str, lake_root: str, market: str = "SPY") -> None:
+    """Writes the same tables at the same paths as the local runner, so the feature build, the quality gates and
+    the agent read a cluster lake and a laptop lake alike. A table named ``*.parquet`` is a folder of part files
+    here and a single file locally; every reader accepts both."""
+    from pyspark.sql import functions as F
+
     spark = build_spark()
     index_df = spark.read.parquet(index_path)
     prices_df = spark.read.parquet(prices_path)
@@ -146,7 +151,9 @@ def run(index_path: str, raw_root: str, prices_path: str, lake_root: str, market
     paragraphs.write.mode("overwrite").partitionBy("form", "year").parquet(f"{lake_root}/silver/paragraphs")
     events = add_spark_labels(gold_events(spark, index_df, prices_df, market))
     events.write.mode("overwrite").partitionBy("year").parquet(f"{lake_root}/gold/events")
-    prices_df.write.mode("overwrite").parquet(f"{lake_root}/silver/prices")
+    prices_df.write.mode("overwrite").parquet(f"{lake_root}/silver/prices.parquet")
+    (index_df.withColumn("year", F.year(F.col("date_filed").cast("date"))).coalesce(1)
+     .write.mode("overwrite").parquet(f"{lake_root}/bronze_index.parquet"))
 
 
 def main(argv: list[str] | None = None) -> None:

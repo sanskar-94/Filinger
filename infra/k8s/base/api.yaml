@@ -15,11 +15,11 @@ spec:
       serviceAccountName: filings-lab
       securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
       initContainers:
-        # the registry, the gold tables the scorer reads, and the index, paragraphs and prices the agent searches
-        # (silver/sections is only an input to the feature build, so it stays in S3)
+        # the registry, the gold tables the scorer reads, and the index, paragraphs and prices the agent searches.
+        # An allowlist: the lake prefix also holds every raw filing (bronze/raw), which must never reach a pod.
         - name: sync-artifacts
           image: amazon/aws-cli:2.27.0
-          command: ["sh", "-c", "aws s3 sync $MODEL_S3_PREFIX /data/registry && aws s3 sync $LAKE_S3_PREFIX /data/lake --exclude 'silver/sections/*'"]
+          command: ["sh", "-c", "aws s3 sync $MODEL_S3_PREFIX /data/registry && aws s3 sync $LAKE_S3_PREFIX /data/lake --exclude '*' --include 'bronze_index.parquet' --include 'bronze_index.parquet/*' --include 'silver/paragraphs/*' --include 'silver/prices.parquet' --include 'silver/prices.parquet/*' --include 'gold/*'"]
           envFrom: [{configMapRef: {name: filings-api}}]
           volumeMounts: [{name: data, mountPath: /data}]
       terminationGracePeriodSeconds: 45  # room for the final experiment log upload on shutdown

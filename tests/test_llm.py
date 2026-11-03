@@ -234,3 +234,15 @@ def test_register_adapter_with_eval_scores(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         cmd_register(SimpleNamespace(adapter=str(train / "adapter"), name="filings-extractor", alias=None, eval=str(ev),
                                      system="missing", run_id=None, prompt_style="compact", tag=None))
+
+
+def test_bi_extractor_table_applies_the_gate_against_production_in_the_same_run(tmp_path):
+    from filings_lab.experiment.export import llm_extractor_table
+
+    ev = {"summary": {"rules": {"n": 400, "extraction_score": 0.85, "schema_valid_rate": 1.0},
+                      "good": {"n": 400, "extraction_score": 0.86, "schema_valid_rate": 1.0},
+                      "bad": {"n": 400, "extraction_score": 0.40, "schema_valid_rate": 1.0}}}
+    (tmp_path / "eval.json").write_text(json.dumps(ev))
+    t = llm_extractor_table(tmp_path / "eval.json").set_index("system")
+    assert t.loc["rules", "gate"] == "production" and t.loc["good", "gate"] == "pass"
+    assert t.loc["bad", "gate"] == "fail" and "extraction_score" in t.loc["bad", "gate_reasons"]

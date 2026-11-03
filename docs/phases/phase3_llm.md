@@ -154,7 +154,20 @@ rows in, signals out). Without an MLflow server the same command writes the file
 `flab llm-features --system <spec>` writes `llm_*` columns per filing and `flab train --extra <file>` adds
 two feature sets (`llm_only`, `all_plus_llm`) plus a DeLong test of all plus LLM against all.
 
-PHASE2_TINY_PLACEHOLDER
+Run for real on all 6,830 filings with the fine tuned champion (schema valid on every filing; about 14
+minutes on four CPU cores with batched generation), and with the rules for comparison, both against the
+same base features and the same purged walk forward folds:
+
+| Signals from | LLM signals alone, AUC [95% CI] | All features | All plus LLM signals | DeLong, plus LLM vs all |
+|---|---|---|---|---|
+| rules | 0.571 [0.553, 0.588] | 0.569 | 0.562 | minus 0.007, p = 0.041 |
+| tiny LoRA champion | 0.534 [0.516, 0.551] | 0.569 | 0.558 | minus 0.011, p = 0.007 |
+
+On the synthetic world the extracted signals carry information on their own, but nothing the text features
+do not already hold: the templated language that drives the labels is in the lexicon features too, so the
+extra columns only add variance, and the noisier fine tuned signals cost more. The gate kept this model out of
+production on extraction quality; Phase 2 reaches the same verdict on predictive value, independently.
+Reports: `artifacts/phase2_llm/report.md` (rules) and `artifacts/phase2_llm_tiny/report.md` (champion).
 
 ## What the synthetic world can and cannot show
 

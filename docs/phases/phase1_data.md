@@ -42,8 +42,9 @@ once, politely, resumably; then let Spark use every core on files already in S3.
 2. Pre event features are invariant to anything that happens on or after day 0. `tests/test_events.py`
 3. XBRL facts are joined point in time on the `filed` date. `tests/test_edgar.py`
 4. The table of contents never wins section extraction; 10-Q Part I and Part II items are disambiguated. `tests/test_text.py`
-5. The Spark job and the single machine runner produce identical tables (same paragraph ids, same CARs to 1e-12, same labels), and the Spark feature build equals the pandas one column by column. `tests/test_spark_parity.py`
-6. Data quality gates pass before anything is trained (below). `tests/test_quality.py`
+5. The Spark job and the single machine runner produce identical tables (same paragraph ids, same CARs to 1e-12, same labels) at the same paths, and the Spark feature build equals the pandas one column by column. The cluster chain also runs on its own output: Spark lake, then Spark features and the quality gate on that lake, as the Databricks bundle runs them (this caught the Spark job writing no index table and prices under another name). `tests/test_spark_parity.py`
+6. The same pipeline, feature build and quality gate produce identical tables on S3 as on local disk. `tests/test_s3_storage.py`
+7. Data quality gates pass before anything is trained (below). `tests/test_quality.py`
 
 ## Real inputs beyond the filings
 

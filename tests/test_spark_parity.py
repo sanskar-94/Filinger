@@ -23,6 +23,35 @@ def test_spark_matches_local(small_world, small_lake, tmp_path):
     lp = pd.read_parquet(small_lake / "silver" / "paragraphs")
     assert set(sp["paragraph_id"]) == set(lp["paragraph_id"])
 
+    # the cluster lake has every table the downstream stages read, at the same paths as the local lake
+    for table, key in [("bronze_index.parquet", "accession"), ("silver/prices.parquet", ["ticker", "date"]),
+                       ("silver/sections", ["accession", "section"])]:
+        s_t, l_t = pd.read_parquet(f"{lake}/{table}"), pd.read_parquet(small_lake / table)
+        assert len(s_t) == len(l_t), table
+        assert s_t[key].astype(str).drop_duplicates().shape[0] == l_t[key].astype(str).drop_duplicates().shape[0], table
+    si, li = pd.read_parquet(f"{lake}/bronze_index.parquet"), pd.read_parquet(small_lake / "bronze_index.parquet")
+    assert (si.set_index("accession")["year"].sort_index().astype(int) == li.set_index("accession")["year"].sort_index().astype(int)).all()
+
+
+def test_cluster_chain_runs_on_the_spark_lake(small_world, tmp_path):
+    """Spark lake, then Spark features and the data quality gate on that same lake, as the Databricks bundle runs
+    them; no table borrowed from the local runner."""
+    from filings_lab.features.spark_features import run as spark_features
+    from filings_lab.pipeline import spark_job
+    from filings_lab.pipeline.quality import run_checks
+
+    lake = str(tmp_path / "cluster_lake")
+    d = small_world["dir"]
+    spark_job.run(str(d / "index.parquet"), str(d / "raw"), str(d / "prices.parquet"), lake)
+    facts = tmp_path / "facts.parquet"
+    small_world["facts"].to_parquet(facts, index=False)
+    spark_features(lake, str(facts))
+    feats = pd.read_parquet(f"{lake}/gold/features")
+    assert len(feats) == len(pd.read_parquet(f"{lake}/gold/events"))
+    checks = run_checks(lake)
+    assert {"bronze_index", "silver_sections", "silver_paragraphs", "silver_prices", "gold_events", "gold_features"} <= {c.table for c in checks}
+    assert not [c for c in checks if c.status == "fail"], [c for c in checks if c.status == "fail"]
+
 
 def test_spark_features_match_pandas(small_world, small_lake, tmp_path):
     import numpy as np

@@ -22,10 +22,35 @@ def _write(df: pd.DataFrame, out: Path, name: str) -> Path:
     return out / f"{name}.csv"
 
 
-def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: str, readout_path: str | None = None) -> list[Path]:
+def llm_extractor_table(eval_path: str | Path, production_system: str = "rules") -> pd.DataFrame:
+    """One row per extraction system from an ``llm-eval`` result, with the gate verdict against the production
+    system scored in the same run (the gate's own baseline rule)."""
+    from ..llm.eval_harness import gate
+
+    doc = json.loads(Path(eval_path).read_text())
+    summary = doc["summary"]
+    base = summary.get(production_system)
+    rows = []
+    for name, m in summary.items():
+        ok, why = (True, []) if name == production_system or base is None else gate(m, base)
+        rows.append({"system": name, "is_production": name == production_system, "gold_items": m.get("n"),
+                     "json_valid_rate": m.get("json_valid_rate"), "schema_valid_rate": m.get("schema_valid_rate"),
+                     "extraction_score": m.get("extraction_score"), "guidance_f1": m.get("guidance_direction_f1"),
+                     "tone_f1": m.get("management_tone_f1"), "liquidity_f1": m.get("liquidity_concern_f1"),
+                     "litigation_f1": m.get("litigation_risk_f1"), "quote_grounding_rate": m.get("quote_grounding_rate"),
+                     "latency_p50_s": m.get("latency_p50_s"), "latency_p95_s": m.get("latency_p95_s"),
+                     "gate": "production" if name == production_system else ("pass" if ok else "fail"),
+                     "gate_reasons": "; ".join(why)})
+    return pd.DataFrame(rows)
+
+
+def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: str, readout_path: str | None = None,
+               phase3_eval: str | None = None) -> list[Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     paths = []
+    if phase3_eval and Path(phase3_eval).exists():
+        paths.append(_write(llm_extractor_table(phase3_eval), out, "llm_extractors"))
     lake = lake.rstrip("/")
     idx = pd.read_parquet(f"{lake}/bronze_index.parquet")
     synth_companies = Path(lake).parent / "synthetic" / "companies.parquet"

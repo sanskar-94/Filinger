@@ -55,7 +55,7 @@ def cmd_analyze(a):
 def cmd_export(a):
     from .export import export_all
 
-    paths = export_all(a.lake, a.db, a.experiment, a.phase2, a.out, a.readout)
+    paths = export_all(a.lake, a.db, a.experiment, a.phase2, a.out, a.readout, a.phase3)
     for p in paths:
         print(p)
 
@@ -107,6 +107,7 @@ def _reg_export(p):
     p.add_argument("--lake", default="data/lake")
     p.add_argument("--phase2", default="artifacts/phase2")
     p.add_argument("--readout", default="artifacts/phase6/readout.json")
+    p.add_argument("--phase3", default="artifacts/phase3_tiny/eval.json", help="llm-eval result for the extractor table")
     p.add_argument("--out", default="dashboards/data")
     p.set_defaults(fn=cmd_export)
 

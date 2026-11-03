@@ -52,10 +52,10 @@ flowchart LR
 |---|---|---|---|
 | 1 Data at scale | Rate limited EDGAR client, bulk and API index builders, price and XBRL ingestion commands, HTML and inline XBRL cleaning, TOC aware section extraction, stable paragraph ids, acceptance time event alignment with informational and tradable CARs, PySpark jobs for the lake and the features (both proven equal to the local build), 22 data quality gates with a leakage canary, Databricks bundle, EMR steps, Terraform, DuckDB SQL | `pipeline/`, `edgar/`, `text/`, `prices/`, `infra/` | [phase1](docs/phases/phase1_data.md) |
 | 2 Classical baseline and statistics | Lexicon, change, rule and point in time XBRL features; purged walk forward LightGBM with purged k fold tuning; DeLong, Newey West, bootstrap, Diebold Mariano, permutation and Benjamini Hochberg tests; calibration; a cost aware tradable backtest; ablations and SHAP | `features/`, `modeling/`, `sql/` | [phase2](docs/phases/phase2_baseline.md) |
-| 3 Fine tune an LLM | Strict signal schema, evidence selection, frontier model teacher with structured outputs and batch labelling, human review with Cohen's kappa, TRL and PEFT LoRA or QLoRA trainer, offline smoke test, eval harness with grounding checks and a regression gate | `llm/`, `configs/` | [phase3](docs/phases/phase3_llm.md) |
-| 4 Serve it in production | FastAPI with circuit breaker and fallback, vLLM with multi LoRA, MLflow tracking and alias registry, live and batch drift with retrain recommendations, Prometheus and Grafana, Kubernetes with HPA, KEDA and CronJobs, EKS Terraform, load test, CI gate with GitOps promotion | `serving/`, `infra/k8s`, `infra/eks`, `loadtest/`, `.github/` | [phase4](docs/phases/phase4_serving.md) |
+| 3 Fine tune an LLM | Strict signal schema, evidence selection, frontier model teacher with structured outputs and batch labelling, human review with Cohen's kappa, TRL and PEFT LoRA or QLoRA trainer, a small model pretrained from scratch and fine tuned end to end on CPU (format learned, content not: the gate keeps the rules), eval harness with grounding checks, gold set fingerprints and a regression gate, adapters registered in MLflow with lineage | `llm/`, `configs/` | [phase3](docs/phases/phase3_llm.md) |
+| 4 Serve it in production | FastAPI with circuit breaker, fallback and per quote grounding, vLLM with multi LoRA (and an OpenAI compatible CPU stand in that served the fine tuned adapters here), MLflow tracking and alias registry, live and batch drift with retrain recommendations, Prometheus with unit tested alerts and Grafana, hardened containers verified as the cluster runs them, Kubernetes with HPA, KEDA and CronJobs, EKS Terraform with least privilege roles, load test, CI gate with GitOps promotion | `serving/`, `infra/k8s`, `infra/eks`, `loadtest/`, `.github/` | [phase4](docs/phases/phase4_serving.md) |
 | 5 Analyst agent and app | Tools for search, paragraphs, filings, prices, event returns, live extraction and model signals; LLM tool loop with verified citations; offline mode; Next.js and TypeScript app with filing viewer, experiment page and review page | `agent/`, `web/` | [phase5](docs/phases/phase5_agent.md) |
-| 6 Experiment and dashboard | Sticky assignment with a model version per variant, event log, power analysis, readout with clustered intervals, SRM check, mSPRT with confidence sequences and a maximum sample, guardrails; BI star schema, DAX and Tableau kits; published dashboard | `experiment/`, `dashboards/` | [phase6](docs/phases/phase6_experiment.md) |
+| 6 Experiment and dashboard | Sticky assignment with a model version per variant, per replica event logs merged from S3 with signed request ids, power analysis, readout with clustered intervals, SRM check, mSPRT with confidence sequences and a maximum sample, guardrails and a treatment integrity check; BI star schema, DAX and Tableau kits; published dashboard | `experiment/`, `dashboards/` | [phase6](docs/phases/phase6_experiment.md) |
 
 Research and design decisions, with sources: [docs/RESEARCH.md](docs/RESEARCH.md).
 
@@ -82,7 +82,35 @@ make web
 
 `make e2e` runs the whole lab on a tiny world in about 20 seconds and checks every stage, `make ab` runs
 the A/B simulation and readout, `make drift` the drift report and `make dashboard-data` the BI export.
-`docker compose up --build` runs the API, the web app, MLflow, Prometheus and Grafana together.
+`docker compose up --build` runs the API, the web app, MLflow, Prometheus and Grafana together. The single
+machine pipeline also runs against S3 (`--lake s3://bucket/lake`, any S3 compatible store via
+`AWS_ENDPOINT_URL`).
+
+The extraction model path on a CPU, end to end (about an hour on four cores):
+
+```bash
+flab llm-dataset --prompt-style compact --budget 1500 --out data/llm_dataset_compact
+```
+
+```bash
+flab llm-pretrain --out artifacts/tiny-base
+```
+
+```bash
+flab llm-train --config configs/lora_tiny_champion.json --data data/llm_dataset_compact --out artifacts/lora/tiny-champion
+```
+
+```bash
+flab llm-eval --gold data/llm_dataset_compact/gold.jsonl --limit 400 --prompt-style compact --batch-size 16 --systems "rules,hf:artifacts/tiny-base|artifacts/lora/tiny-champion/adapter@tiny-lora-champion" --out artifacts/phase3_tiny
+```
+
+```bash
+flab gate --extractor-eval artifacts/phase3_tiny/eval.json --system tiny-lora-champion
+```
+
+```bash
+flab llm-serve --base artifacts/tiny-base --adapter filings-extractor=artifacts/lora/tiny-champion/adapter
+```
 
 ## Running on real data
 
@@ -115,8 +143,11 @@ teacher labelling and the online agent; train the adapter on a 24 GB GPU with `f
 The synthetic world plants a weak, known relationship between language and returns so that every stage can
 be executed and checked against the truth. Its results validate the machinery, not a trading claim. On real
 filings, published work suggests out of sample AUC around 0.52 to 0.55; the lab treats anything above 0.65 as
-a leakage bug until proven otherwise. Results for the fine tuned and frontier LLM need a GPU and an API key
-and are not reported here; the commands that produce them are.
+a leakage bug until proven otherwise. The LLM method was run for real on a 5.2M parameter model pretrained
+from scratch on a CPU: fine tuning took schema valid output from 0% to 100% on 400 gold filings, but a model
+that small scores 0.38 against the rules' 0.85, so the gate keeps the rules in production. Results for a 3B to
+8B fine tuned model and for the frontier teacher need a GPU and an API key and are not reported here; the
+commands that produce them are.
 
 ## Quality
 
@@ -126,9 +157,11 @@ ruff check src tests scripts
 cd web && npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-CI runs these on Python 3.11 to 3.13, plus the PySpark parity tests on Java 17, the LoRA smoke test on CPU
-PyTorch, the end to end script, kubeconform on the rendered Kubernetes overlays, terraform validate, and the
-model gate (with the data quality gates) on every change to models, features or training code.
+CI runs these on Python 3.11 to 3.13 (S3 tests against a moto server included), plus the PySpark parity tests
+on Java 17, the LoRA smoke and local LLM server tests on CPU PyTorch, the end to end script, kubeconform on the
+rendered Kubernetes overlays, a check that generated Kubernetes objects match their sources, promtool alert
+rule unit tests, terraform validate, and the model gate (with the data quality gates) on every change to
+models, features or training code.
 
 ## Three stories from one system
 
