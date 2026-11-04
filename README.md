@@ -120,14 +120,10 @@ bash scripts/gpu_finetune.sh
 ```
 
 On an Apple Silicon Mac, even one with 8 GB of memory, the same phase with Qwen2.5 3B quantized to 4 bit and
-trained with MLX:
+trained with MLX, from a fresh clone in one command (environment, lake, fine tune, results in `eval/mac_3b/`):
 
 ```bash
-pip install -e ".[ml,serve,mlx]"
-```
-
-```bash
-bash scripts/mac_finetune.sh
+bash scripts/mac_full_run.sh
 ```
 
 ## Running on real data

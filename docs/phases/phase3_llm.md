@@ -98,7 +98,9 @@ production gold filings, the gate, and registration of the adapter with its verd
 3. The cluster: `infra/k8s/jobs/finetune.yaml`, a Job on the GPU node group that syncs the lake from S3, runs the
    script and uploads the run and the candidate adapter; serving it stays a reviewed pull request.
 4. An Apple Silicon Mac, including one with 8 GB: `scripts/mac_finetune.sh` (install with
-   `pip install -e ".[ml,serve,mlx]"`). Half precision 3B weights need about 6 GB, which an 8 GB Mac cannot spare for
+   `pip install -e ".[ml,serve,mlx]"`), or `scripts/mac_full_run.sh`, which does everything from a fresh clone in
+   one command: a Python 3.10+ environment, the synthetic lake, the fine tune, and the results copied to
+   `eval/mac_3b/` for committing. Half precision 3B weights need about 6 GB, which an 8 GB Mac cannot spare for
    training, so this route trains LoRA adapters on Qwen2.5 3B Instruct quantized to 4 bit (about 2 GB) with Apple's
    MLX on the Mac's GPU: batch of one, compact prompts of about 600 tokens, gradient checkpointing, loss on the
    answer only. The evaluation harness scores MLX models through an `mlx:` system spec, loading one model at a

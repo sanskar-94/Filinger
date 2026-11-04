@@ -61,9 +61,10 @@ else
   VERDICT=failed
   ALIAS=()
 fi
+# ${ALIAS[@]+...}: macOS ships bash 3.2, where an empty array under set -u is an unbound variable error
 flab llm-register --adapter "$OUT/adapter" --name filings-extractor --eval "$OUT/eval/eval.json" \
   --system "${NAME}-lora" --prompt-style compact --tag "gate=$VERDICT" --tag framework=mlx --tag "base_model=$MODEL" \
-  "${ALIAS[@]}" | tee "$OUT/register.json"
+  ${ALIAS[@]+"${ALIAS[@]}"} | tee "$OUT/register.json"
 
 echo "gate $VERDICT for ${NAME}-lora; report $OUT/eval/report.md"
 if [ "${STRICT:-0}" = "1" ] && [ "$VERDICT" = "failed" ]; then exit 1; fi
