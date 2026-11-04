@@ -55,6 +55,11 @@ jobs:
           flab llm-dataset --lake data/lake --prompt-style compact --budget 1500 --test-years 1 --out data/llm_dataset_compact
           flab llm-pretrain --lake data/lake --dataset data/llm_dataset_compact --out artifacts/tiny-base --max-steps 10 --test-years 1
           SMOKE=1 bash scripts/gpu_finetune.sh
+      - name: Apple Silicon fine tune pipeline (MLX), smoke mode on the CPU build of MLX
+        run: |
+          pip install "mlx[cpu]" mlx-lm
+          pytest -q tests/test_llm.py -k mlx
+          SMOKE=1 bash scripts/mac_finetune.sh
 
   web:
     runs-on: ubuntu-latest

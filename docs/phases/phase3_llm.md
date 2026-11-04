@@ -97,9 +97,21 @@ production gold filings, the gate, and registration of the adapter with its verd
    `docker run --gpus all -e HF_TOKEN -e ANTHROPIC_API_KEY filings-train` (the deploy workflow pushes it to ECR).
 3. The cluster: `infra/k8s/jobs/finetune.yaml`, a Job on the GPU node group that syncs the lake from S3, runs the
    script and uploads the run and the candidate adapter; serving it stays a reviewed pull request.
+4. An Apple Silicon Mac, including one with 8 GB: `scripts/mac_finetune.sh` (install with
+   `pip install -e ".[ml,serve,mlx]"`). Half precision 3B weights need about 6 GB, which an 8 GB Mac cannot spare for
+   training, so this route trains LoRA adapters on Qwen2.5 3B Instruct quantized to 4 bit (about 2 GB) with Apple's
+   MLX on the Mac's GPU: batch of one, compact prompts of about 600 tokens, gradient checkpointing, loss on the
+   answer only. The evaluation harness scores MLX models through an `mlx:` system spec, loading one model at a
+   time, and the same gate and registration follow. If memory still runs short, `MODEL` can name the 1.5B 4 bit
+   model instead. Verified here on MLX's CPU build with the small model: the whole script runs end to end, and a
+   600 step training run lowered validation loss from 10.0 to 6.3. That is too few examples for the small scratch
+   model to emit valid JSON (the PyTorch run needed about 8,000), and MLX's CPU build trains at only about 12 tokens
+   per second here, so the full learning check belongs on a Mac's GPU, where a 3B instruct model also starts from
+   far stronger instruction following.
 
-`SMOKE=1` runs every step of the same script on the small CPU model. CI does that on every push, on a tiny world it
-builds from scratch, so the GPU path is exercised continuously even though CI has no GPU. That run caught one
+`SMOKE=1` runs every step of either script on the small CPU model. CI does that for both on every push, on a tiny
+world it builds from scratch (the MLX one on MLX's CPU build), so both paths are exercised continuously even though
+CI has neither a GPU nor a Mac. That run caught one
 bug: with `report_to: mlflow` and no tracking server, the transformers callback fell back to a local store and
 stopped the run; MLflow reporting now switches on only when a server is configured, as everywhere else.
 

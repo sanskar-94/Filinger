@@ -291,3 +291,36 @@ def test_mlflow_reporting_only_with_a_tracking_server(monkeypatch):
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     assert _reporters(["mlflow"]) == ["none"] and _reporters(["mlflow", "tensorboard"]) == ["tensorboard"]
     assert _reporters(["none"]) == ["none"]
+
+
+def test_mlx_dataset_conversion_keeps_messages_and_names_splits_for_mlx(tmp_path):
+    from filings_lab.llm.mlx_backend import to_mlx_dataset
+
+    src = tmp_path / "ds"
+    src.mkdir()
+    rec = {"prompt": [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
+           "completion": [{"role": "assistant", "content": json.dumps(LABEL)}]}
+    (src / "train.jsonl").write_text(json.dumps(rec) + "\n" + json.dumps(rec) + "\n")
+    (src / "val.jsonl").write_text(json.dumps(rec) + "\n")
+    counts = to_mlx_dataset(src, tmp_path / "mlx")
+    assert counts == {"train": 2, "valid": 1}
+    row = json.loads((tmp_path / "mlx" / "train.jsonl").read_text().splitlines()[0])
+    assert [m["role"] for m in row["messages"]] == ["system", "user", "assistant"]
+    assert not (tmp_path / "mlx" / "val.jsonl").exists()  # mlx-lm reads valid.jsonl
+
+
+def test_mlx_extractor_runs_a_local_qwen2_model(tmp_path):
+    """Builds a two layer Qwen2 model and tokenizer like flab llm-pretrain does, then generates through MLX."""
+    pytest.importorskip("mlx_lm")
+    pytest.importorskip("torch")
+    pytest.importorskip("tokenizers")
+    from filings_lab.llm.mlx_backend import MLXExtractor
+    from filings_lab.llm.tiny import build_tokenizer, init_model
+
+    tok = build_tokenizer(["We are raising our full year guidance."] * 50, vocab_size=300)
+    model = init_model(tok, hidden=32, layers=2, heads=2, kv_heads=1, intermediate=64)
+    model.save_pretrained(tmp_path / "m")
+    tok.save_pretrained(tmp_path / "m")
+    ex = MLXExtractor(str(tmp_path / "m"), name="mlx-test", max_new_tokens=8)
+    r = ex.extract(INP)
+    assert r.system == "mlx-test" and r.input_tokens > 0 and r.latency_s >= 0

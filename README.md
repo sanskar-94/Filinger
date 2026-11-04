@@ -119,6 +119,17 @@ and production, gate, registration):
 bash scripts/gpu_finetune.sh
 ```
 
+On an Apple Silicon Mac, even one with 8 GB of memory, the same phase with Qwen2.5 3B quantized to 4 bit and
+trained with MLX:
+
+```bash
+pip install -e ".[ml,serve,mlx]"
+```
+
+```bash
+bash scripts/mac_finetune.sh
+```
+
 ## Running on real data
 
 ```bash
@@ -156,7 +167,8 @@ that small scores 0.38 against the rules' 0.85, so the gate keeps the rules in p
 reference, a frontier model labelled 60 gold filings blind and scored 0.909 against the rules' 0.859 on the same filings
 (paired bootstrap, 95% CI of the gain 0.006 to 0.162). The 3B to 8B fine tune needs a GPU and the model hub,
 which this environment does not have; it is one job (`scripts/gpu_finetune.sh`, `Dockerfile.train`, or the
-Kubernetes Job in `infra/k8s/jobs`) whose every step CI runs on the small model.
+Kubernetes Job in `infra/k8s/jobs`), or `scripts/mac_finetune.sh` on an Apple Silicon Mac, and CI runs every
+step of both on the small model.
 
 ## Quality
 

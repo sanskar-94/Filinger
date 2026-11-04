@@ -138,6 +138,8 @@ def evaluate(systems: list[Extractor], gold, out_dir: str | Path, reference: str
     for ex in systems:
         safe = re.sub(r"[^\w.-]", "_", ex.name)
         res = run_system(ex, gold, workers, cache=out / "predictions" / f"{safe}.jsonl", batch_size=batch_size)
+        if hasattr(ex, "release"):  # free a local model before the next one loads (8 GB machines)
+            ex.release()
         tables[ex.name] = item_table(res, gold)
         summary[ex.name] = summarize(tables[ex.name], (gpu_hourly_usd or {}).get(ex.name))
     comparisons = {}

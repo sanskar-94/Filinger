@@ -18,7 +18,7 @@ def _inputs(lake: str, budget: int):
 
 def make_system(spec: str, style: str = "full"):
     """rules | frontier[:model] | vllm:<base_url>|<model>[|guided] | hf:<model_path>[|<adapter_path>] |
-    replay:<labels.jsonl>, each optionally followed by @name.
+    mlx:<model>[|<adapter_path>] | replay:<labels.jsonl>, each optionally followed by @name.
 
     ``replay`` scores labels produced elsewhere (an annotator, a batch API results file): one JSON object per line
     with ``accession`` and ``signals``."""
@@ -28,6 +28,11 @@ def make_system(spec: str, style: str = "full"):
     kind, _, rest = spec.partition(":")
     if kind == "rules":
         return RuleExtractor()
+    if kind == "mlx":  # Apple Silicon (or Linux CPU) through mlx-lm: mlx:<model>[|<adapter>]
+        from .mlx_backend import MLXExtractor
+
+        parts = rest.split("|")
+        return MLXExtractor(parts[0], parts[1] if len(parts) > 1 else None, style=style, **({"name": label} if label else {}))
     if kind == "replay":
         rows = [json.loads(x) for x in Path(rest).read_text().splitlines() if x.strip()]
         return LabelExtractor({r["accession"]: r["signals"] for r in rows if r.get("signals")}, name=label or "replay")
@@ -280,6 +285,18 @@ def _reg_register(p):
     p.set_defaults(fn=cmd_register)
 
 
+def cmd_mlx_data(a):
+    from .mlx_backend import to_mlx_dataset
+
+    print(json.dumps(to_mlx_dataset(a.data, a.out)))
+
+
+def _reg_mlx_data(p):
+    p.add_argument("--data", default="data/llm_dataset_compact", help="a dataset written by llm-dataset")
+    p.add_argument("--out", default="data/mlx_dataset")
+    p.set_defaults(fn=cmd_mlx_data)
+
+
 COMMANDS = {
     "llm-pretrain": (_reg_pretrain, "pretrain the small filings language model from scratch (CPU friendly)"),
     "llm-gold": (_reg_gold, "build the gold set from human reviewed labels"),
@@ -289,4 +306,5 @@ COMMANDS = {
     "llm-eval": (_reg_eval, "compare extractors on the gold set"),
     "llm-features": (_reg_features, "run an extractor over the lake and write llm_* features"),
     "llm-register": (_reg_register, "register a fine tuned adapter as a model version with its eval scores"),
+    "llm-mlx-data": (_reg_mlx_data, "convert a fine tuning dataset to mlx-lm chat format (Apple Silicon training)"),
 }
