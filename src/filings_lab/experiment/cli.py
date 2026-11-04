@@ -55,7 +55,7 @@ def cmd_analyze(a):
 def cmd_export(a):
     from .export import export_all
 
-    paths = export_all(a.lake, a.db, a.experiment, a.phase2, a.out, a.readout, a.phase3, a.phase3_sample)
+    paths = export_all(a.lake, a.db, a.experiment, a.phase2, a.out, a.readout, a.phase3, a.phase3_sample, a.phase3_3b)
     for p in paths:
         print(p)
 
@@ -110,6 +110,8 @@ def _reg_export(p):
     p.add_argument("--phase3", default="artifacts/phase3_tiny/eval.json", help="llm-eval result for the extractor table")
     p.add_argument("--phase3-sample", default="artifacts/phase3_frontier_sample/eval.json",
                    help="llm-eval result on the frontier reference sample")
+    p.add_argument("--phase3-3b", default="eval/mac_3b/eval.json",
+                   help="llm-eval result of the pretrained 3B fine tune (scripts/mac_finetune.sh or gpu_finetune.sh)")
     p.add_argument("--out", default="dashboards/data")
     p.set_defaults(fn=cmd_export)
 

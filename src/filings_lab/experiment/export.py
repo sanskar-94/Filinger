@@ -45,7 +45,8 @@ def llm_extractor_table(eval_path: str | Path, production_system: str = "rules")
 
 
 def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: str, readout_path: str | None = None,
-               phase3_eval: str | None = None, phase3_sample_eval: str | None = None) -> list[Path]:
+               phase3_eval: str | None = None, phase3_sample_eval: str | None = None,
+               phase3_3b_eval: str | None = None) -> list[Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     paths = []
@@ -53,6 +54,8 @@ def export_all(lake: str, db: str, experiment: str, phase2_dir: str, out_dir: st
         paths.append(_write(llm_extractor_table(phase3_eval), out, "llm_extractors"))
     if phase3_sample_eval and Path(phase3_sample_eval).exists():  # the frontier reference sample
         paths.append(_write(llm_extractor_table(phase3_sample_eval), out, "llm_frontier_sample"))
+    if phase3_3b_eval and Path(phase3_3b_eval).exists():  # the pretrained 3B run (committed under eval/)
+        paths.append(_write(llm_extractor_table(phase3_3b_eval), out, "llm_extractors_3b"))
     lake = lake.rstrip("/")
     idx = pd.read_parquet(f"{lake}/bronze_index.parquet")
     synth_companies = Path(lake).parent / "synthetic" / "companies.parquet"
