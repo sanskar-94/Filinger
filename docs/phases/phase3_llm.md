@@ -109,7 +109,8 @@ production gold filings, the gate, and registration of the adapter with its verd
    600 step training run lowered validation loss from 10.0 to 6.3. That is too few examples for the small scratch
    model to emit valid JSON (the PyTorch run needed about 8,000), and MLX's CPU build trains at only about 12 tokens
    per second here, so the full learning check belongs on a Mac's GPU, where a 3B instruct model also starts from
-   far stronger instruction following.
+   far stronger instruction following. That check has now run on a real 8 GB Mac; the results are in
+   [their own section](#the-pretrained-3b-model-on-an-8-gb-mac-400-gold-filings-compact-inputs).
 
 `SMOKE=1` runs every step of either script on the small CPU model. CI does that for both on every push, on a tiny
 world it builds from scratch (the MLX one on MLX's CPU build), so both paths are exercised continuously even though
@@ -176,7 +177,8 @@ Paired bootstrap, frontier minus rules: plus 0.050, 95% CI [0.006, 0.162], P(no 
 gains where rules are weakest: tone, which needs weighing mixed statements, and liquidity, where the rules miss
 a stated need to raise capital to fund operations. Its one litigation miss is a filing whose 1,500 character excerpt contains no legal paragraph
 at all, which exposed a dataset fault (below). So the ordering the project expects holds on this data: frontier
-above rules above the CPU sized student, and a 3B to 8B student is what has to close the gap.
+above rules above the CPU sized student, and a 3B to 8B student is what has to close the gap. The next section
+reports the first 3B student.
 
 ### A dataset fault the frontier labels exposed
 
@@ -188,6 +190,57 @@ text. Paragraphs with direct evidence for a labelled field now rank first, every
 unsupported labels per field in `stats.json`, and a test requires zero at both budgets. Rebuilt with the fix, the
 compact dataset has none; the production gold set (every paragraph fits its budget) keeps its fingerprint. The
 tiny model results above predate the fix.
+
+## The pretrained 3B model on an 8 GB Mac (400 gold filings, compact inputs)
+
+`scripts/mac_full_run.sh` ran end to end on an Apple M2 with 8 GB: LoRA (rank 8 on 16 layers, 0.216% of the
+parameters trainable) on `mlx-community/Qwen2.5-3B-Instruct-4bit`, 2,000 iterations at batch 1, which is under one
+epoch of the 2,745 training filings. Validation loss went from 2.065 at iteration 1 to 0.011 at iteration 2,000.
+The whole job took 17,687 seconds: training 2 h 37 min, the base model's evaluation 1 h 19 min and the fine tuned
+model's 40 min. Another memory heavy job shared the machine throughout, so these are not clean benchmark timings.
+
+| System | JSON valid | Schema valid | Extraction score | Guidance F1 | Tone F1 | Liquidity F1 | Litigation F1 | Quote grounding | Latency p50 / p95 |
+|---|---|---|---|---|---|---|---|---|---|
+| rules (production) | 100% | 100% | 0.8600 | 1.0000 | 0.5408 | 0.8994 | 1.0000 | 100% | 0.0002 / 0.0004 s |
+| 3B 4 bit, no fine tuning | 36.75% | 0% | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | n/a | 10.6121 / 14.6111 s |
+| 3B 4 bit + LoRA | 100% | 100% | 0.8541 | 1.0000 | 0.4164 | 1.0000 | 1.0000 | 100% | 4.6678 / 7.1337 s |
+
+| Paired bootstrap on extraction score | Difference | 95% CI | P(difference <= 0) |
+|---|---|---|---|
+| fine tuned minus base | 0.8541 | [0.8421, 0.8654] | 0.000 |
+| fine tuned minus rules | minus 0.0060 | [minus 0.0412, 0.0977] | 0.610 |
+| base minus rules | minus 0.8600 | [minus 0.8936, minus 0.7554] | 1.000 |
+
+`flab gate` prints `extractor gate: PASS (baseline: rules in the same evaluation run)`, so the adapter is registered
+as `filings-extractor` version 1 with the alias `challenger`. Production stays on the rules.
+
+What this shows, read plainly:
+
+1. Fine tuning is decisive. Untuned, the 3B model mostly explains its reasoning in prose: 249 of 400 outputs hold no
+   JSON object and none passes the schema. Fine tuned, every output passes, every quote is grounded and the median
+   answer takes less than half the time.
+2. Against the rules it is a tie, not a win. The confidence interval spans zero and the fine tuned model is lower
+   on the point estimate.
+3. The gate pass rests on one filing. By field, the score difference is minus 0.0311 from tone and plus 0.0252 from
+   liquidity. Only 3 of the 400 gold filings carry a liquidity concern and the rules miss one of them
+   (`0001000148-23-000103`), which is all that separates their liquidity F1 of 0.8994 from 1.0. Had the rules caught
+   it, the difference would be minus 0.0311 and the gate, with its tolerance of 0.01, would fail.
+4. Tone is where it is weaker. It answers neutral on 328 of 400 filings: right on 171 of the 196 neutral filings, but
+   on only 6 of 116 positive (rules 71) and 37 of 88 negative (rules 46). Accuracy hides this (0.535 against 0.545);
+   macro F1 shows it. It has learned the majority class for this field, not how to weigh mixed statements.
+
+So this result does not argue for promotion. Training for more than one epoch is the obvious next experiment, since
+tone is the one field a 3B model should be able to improve on rules that score 0.5408.
+
+Served through the real API, with `python -m mlx_lm server --adapter-path artifacts/mac_run/adapter` as the backend
+behind `flab serve` (`FLAB_LLM_MODEL=default_model`, `FLAB_LLM_PROMPT_STYLE=compact`), 10 gold filings through
+`POST /v1/extract` used the model on every request with no fallback and every quote grounded. All 40 fields equal the
+evaluation run's predictions and 35 of 40 equal gold; all five misses are tone.
+
+`eval/mac_3b/` holds the report, metrics, gate verdict, registration, end of the training log, machine details, per
+filing rows and raw predictions. Validity rates, field F1s and scores recompute from `items.parquet`, and the
+paired bootstrap reproduces `eval.json` exactly once the two boolean label columns are converted back from the
+text they are stored as. The 26 MB adapter is not committed; it stays in `artifacts/mac_run/adapter`.
 
 ## The gate decides (`flab gate`)
 
@@ -239,6 +292,7 @@ Reports: `artifacts/phase2_llm/report.md` (rules) and `artifacts/phase2_llm_tiny
 The synthetic guidance sentences are templated, which is why rules reach a guidance F1 of 1.0 and why a small
 model has nothing to add there; tone is where rules struggle (F1 0.54) and where the frontier reference gains.
 Real filings phrase guidance in far more ways, which is where a 3B to 8B fine tuned model is expected to earn its
-place. That run needs a GPU and access to the model hub, neither of which this environment has; it is packaged as
-one GPU job (below) that trains, scores base, fine tuned and frontier systems on the gold set, gates the
-candidate and registers it.
+place. The 3B run above cannot show that: on templated text it can at best tie the rules on those fields. Real
+filings and larger models remain to be run, with the same jobs: the GPU job (above) trains, scores base, fine
+tuned and frontier systems on the gold set, gates the candidate and registers it, and so far has only run in smoke
+mode on the small model.

@@ -1,0 +1,4 @@
+system,is_production,gold_items,json_valid_rate,schema_valid_rate,extraction_score,guidance_f1,tone_f1,liquidity_f1,litigation_f1,quote_grounding_rate,latency_p50_s,latency_p95_s,gate,gate_reasons
+rules,True,400,1.0,1.0,0.8600463509296237,1.0,0.5408143345361047,0.89937106918239,1.0,1.0,0.00023860449437052011,0.00040486220095772293,production,
+qwen3b-4bit-base,False,400,0.3675,0.0,0.0,0.0,0.0,0.0,0.0,,10.612082750012632,14.611095710424705,fail,extraction_score: candidate 0.0000 vs production 0.8600 (tolerance 0.01); schema_valid_rate: candidate 0.0000 vs production 1.0000 (tolerance 0.005); guidance_direction_f1: candidate 0.0000 vs production 1.0000 (tolerance 0.02); latency_p95_s: candidate 14.6111 exceeds the SLO of 8.0
+qwen3b-4bit-lora,False,400,1.0,1.0,0.8540913643402801,1.0,0.4163654573611207,1.0,1.0,1.0,4.667848083510762,7.1337293774035055,pass,
