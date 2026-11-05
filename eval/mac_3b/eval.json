@@ -1,0 +1,76 @@
+{
+  "summary": {
+    "rules": {
+      "n": 400,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.5408143345361047,
+      "management_tone_acc": 0.545,
+      "liquidity_concern_f1": 0.89937106918239,
+      "liquidity_concern_acc": 0.9975,
+      "litigation_risk_f1": 1.0,
+      "litigation_risk_acc": 1.0,
+      "extraction_score": 0.8600463509296237,
+      "quote_grounding_rate": 1.0,
+      "latency_p50_s": 0.00023860449437052011,
+      "latency_p95_s": 0.00040486220095772293,
+      "cost_per_1k_usd": 0.0
+    },
+    "qwen3b-4bit-base": {
+      "n": 400,
+      "json_valid_rate": 0.3675,
+      "schema_valid_rate": 0.0,
+      "guidance_direction_f1": 0.0,
+      "guidance_direction_acc": 0.0,
+      "management_tone_f1": 0.0,
+      "management_tone_acc": 0.0,
+      "liquidity_concern_f1": 0.0,
+      "liquidity_concern_acc": 0.0,
+      "litigation_risk_f1": 0.0,
+      "litigation_risk_acc": 0.0,
+      "extraction_score": 0.0,
+      "quote_grounding_rate": NaN,
+      "latency_p50_s": 10.612082750012632,
+      "latency_p95_s": 14.611095710424705,
+      "cost_per_1k_usd": 0.0
+    },
+    "qwen3b-4bit-lora": {
+      "n": 400,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.4163654573611207,
+      "management_tone_acc": 0.535,
+      "liquidity_concern_f1": 1.0,
+      "liquidity_concern_acc": 1.0,
+      "litigation_risk_f1": 1.0,
+      "litigation_risk_acc": 1.0,
+      "extraction_score": 0.8540913643402801,
+      "quote_grounding_rate": 1.0,
+      "latency_p50_s": 4.667848083510762,
+      "latency_p95_s": 7.1337293774035055,
+      "cost_per_1k_usd": 0.0
+    }
+  },
+  "comparisons": {
+    "qwen3b-4bit-base vs rules": {
+      "diff": -0.8600463509296237,
+      "ci_low": -0.8935679641826197,
+      "ci_high": -0.755385462282056,
+      "p_le_0": 1.0
+    },
+    "qwen3b-4bit-lora vs rules": {
+      "diff": -0.005954986589343569,
+      "ci_low": -0.04117816306733665,
+      "ci_high": 0.09768609007759443,
+      "p_le_0": 0.61
+    }
+  },
+  "gold": {
+    "n": 400,
+    "sha256": "aeca7fc45021b9bd0ec447591b25c6981f52826e099e6ba3f84ff0ef3e7ae261"
+  }
+}

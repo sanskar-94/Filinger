@@ -1,0 +1,23 @@
+{
+  "name": "filings-extractor",
+  "version": 1,
+  "alias": "challenger",
+  "metrics": {
+    "n": 400,
+    "json_valid_rate": 1.0,
+    "schema_valid_rate": 1.0,
+    "guidance_direction_f1": 1.0,
+    "guidance_direction_acc": 1.0,
+    "management_tone_f1": 0.4163654573611207,
+    "management_tone_acc": 0.535,
+    "liquidity_concern_f1": 1.0,
+    "liquidity_concern_acc": 1.0,
+    "litigation_risk_f1": 1.0,
+    "litigation_risk_acc": 1.0,
+    "extraction_score": 0.8540913643402801,
+    "quote_grounding_rate": 1.0,
+    "latency_p50_s": 4.667848083510762,
+    "latency_p95_s": 7.1337293774035055,
+    "cost_per_1k_usd": 0.0
+  }
+}

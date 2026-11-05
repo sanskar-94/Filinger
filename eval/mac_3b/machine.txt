@@ -1,0 +1,7 @@
+wall_seconds: 17687
+model: mlx-community/Qwen2.5-3B-Instruct-4bit
+machine: Apple M2, 8589934592 bytes
+os: 27.0.1
+python: Python 3.13.5
+mlx: 0.32.4, mlx-lm: 0.32.2
+commit: a8e93f5
