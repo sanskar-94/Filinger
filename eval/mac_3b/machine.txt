@@ -4,4 +4,4 @@ machine: Apple M2, 8589934592 bytes
 os: 27.0.1
 python: Python 3.13.5
 mlx: 0.32.4, mlx-lm: 0.32.2
-commit: a8e93f5
+commit: adaef2e
