@@ -39,6 +39,8 @@ def build_spark(app: str = "filings-lab"):
         .config("spark.sql.execution.arrow.pyspark.enabled", "true")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.parquet.compression.codec", "zstd")
+        # acceptance times are UTC and event dates are midnights: any other session zone shifts both when they are written
+        .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
     )
 

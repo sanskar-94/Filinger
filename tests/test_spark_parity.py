@@ -11,12 +11,15 @@ def test_spark_matches_local(small_world, small_lake, tmp_path):
 
     lake = str(tmp_path / "spark_lake")
     d = small_world["dir"]
+    spark_job.build_spark().conf.set("spark.sql.session.timeZone", "Asia/Kolkata")  # a machine that is not on UTC
     spark_job.run(str(d / "index.parquet"), str(d / "raw"), str(d / "prices.parquet"), lake)
 
     se, le = pd.read_parquet(f"{lake}/gold/events"), pd.read_parquet(small_lake / "gold" / "events")
     m = se.merge(le, on="accession", suffixes=("_s", "_l"))
     assert len(m) == len(le) == len(se)
     assert (m["car_s"] - m["car_l"]).abs().max() < 1e-12
+    assert (pd.to_datetime(m["event_date_s"]) == pd.to_datetime(m["event_date_l"])).all()
+    assert (pd.to_datetime(m["accepted_at_s"], utc=True) == pd.to_datetime(m["accepted_at_l"], utc=True)).all()
     assert (m["label_tercile_s"].astype(int) == m["label_tercile_l"].astype(int)).all()
 
     sp = pd.read_parquet(f"{lake}/silver/paragraphs")
