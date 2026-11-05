@@ -150,7 +150,7 @@ autoscaling does not use CPU.
 |---|---|
 | `ci.yml` | ruff, tests on Python 3.11 to 3.13 (including the S3 lake tests against a moto server), Spark parity tests with Java 17, LoRA smoke and local LLM server tests on CPU torch, web lint, typecheck, tests and build, the end to end script, kubeconform on both rendered overlays, generated Kubernetes objects up to date, promtool config check and alert rule unit tests, terraform fmt and validate |
 | `model-gate.yml` | on changes to models, configs, features or training code: rebuilds the frozen evaluation world, runs the data quality gates, retrains the reaction model, evaluates the candidate extractor on the gold set (or a staging vLLM endpoint when `CANDIDATE_LLM_URL` is set) and runs `flab gate` against `models/production.json`; fails the PR if anything gated is worse |
-| `deploy.yml` | on main: builds and pushes both images tagged with the commit SHA, then a protected `production` environment applies the prod overlay, waits for rollouts and smoke tests `/readyz` |
+| `deploy.yml` | on main: builds and pushes the API, web, vLLM and training images tagged with the commit SHA, then a protected `production` environment applies the prod overlay, waits for rollouts and smoke tests `/readyz`. Pushes run it only once the repository variable `DEPLOY_ENABLED` is `true` (after `infra/eks` is applied and the `AWS_DEPLOY_ROLE_ARN` secret is set); until then they skip it, and a manual run still tries |
 
 Promotion is GitOps: a pull request edits `models/production.json`, and the gate must pass before merge.
 Gated metrics: extraction score (may drop at most 0.01), schema validity, quote grounding, guidance F1,
