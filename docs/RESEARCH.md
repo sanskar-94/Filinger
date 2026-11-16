@@ -25,7 +25,7 @@ Fair access policy (sec.gov "Accessing EDGAR Data"):
 
 EDGAR has no prices. The lab treats prices as a pluggable `PriceSource`:
 1. `CsvPriceSource` for any vendor export (CRSP via WRDS if you have academic access, Polygon, Tiingo, etc.).
-2. `StooqPriceSource` for free daily bars for experimentation.
+2. `YahooPriceSource` for free adjusted daily bars for experimentation (Stooq, the first choice, now sits behind a browser check).
 3. `SyntheticPriceSource` for tests and the offline demo.
 
 Survivorship bias warning: free sources usually drop delisted tickers. Results on free data overstate performance; the README says so and the evaluation reports the coverage rate.

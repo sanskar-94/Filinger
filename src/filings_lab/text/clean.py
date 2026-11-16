@@ -21,6 +21,9 @@ _SKIP_TAGS = {"script", "style", "head", "ix:header", "xbrli:context", "xbrli:un
 _DOC_RE = re.compile(r"<DOCUMENT>(.*?)</DOCUMENT>", re.S | re.I)
 _TYPE_RE = re.compile(r"<TYPE>\s*([^\s<]+)", re.I)
 _TEXT_RE = re.compile(r"<TEXT>(.*?)</TEXT>", re.S | re.I)
+_FILENAME_RE = re.compile(r"<FILENAME>\s*([^\s<]+)", re.I)
+_PRESS_TYPE = re.compile(r"^EX-99(\.\d+)?$", re.I)
+_BINARY_BODY = re.compile(r"^\s*(begin \d{3} \S|<PDF>)", re.I)  # uuencoded graphics and wrapped PDFs
 _NUMERIC_TOKEN = re.compile(r"^[\(\)\$%,.\-—–\d\s]+$")
 _WS = re.compile(r"[ \t    ]+")
 _MULTI_NL = re.compile(r"\n{3,}")
@@ -135,6 +138,59 @@ def select_main_document(raw: str, form: str | None = None) -> str:
             return body.group(1) if body else doc
     body = _TEXT_RE.search(docs[0])
     return body.group(1) if body else docs[0]
+
+
+def split_documents(raw: str) -> list[dict]:
+    """Documents of a full submission ``.txt`` in file order, each with ``type``, ``filename`` and ``body``.
+
+    Empty for a single HTML document, which has no SGML wrapper.
+    """
+    docs = []
+    for doc in _DOC_RE.findall(raw):
+        dtype, name, body = _TYPE_RE.search(doc), _FILENAME_RE.search(doc), _TEXT_RE.search(doc)
+        docs.append({"type": dtype.group(1).upper() if dtype else "", "filename": name.group(1) if name else "",
+                     "body": body.group(1) if body else doc})
+    return docs
+
+
+def _readable(body: str) -> bool:
+    return not _BINARY_BODY.match(body[:400])
+
+
+def press_release_text(raw: str) -> str:
+    """Clean text of the EX-99 exhibits of a full submission, in file order; empty when there are none.
+
+    An earnings 8-K says almost nothing itself: Item 2.02 is one sentence furnishing the press release as
+    Exhibit 99.1, and the results, the guidance and management's commentary are all in that exhibit.
+    """
+    parts = []
+    for d in split_documents(raw):
+        if _PRESS_TYPE.match(d["type"]) and _readable(d["body"]):
+            body = d["body"]
+            text = html_to_text(body) if looks_like_html(body) else normalise(html.unescape(body))
+            if text:
+                parts.append(text)
+    return "\n\n".join(parts)
+
+
+def prune_submission(raw: str, form: str) -> str:
+    """Keep the header, the main document and readable EX-99 exhibits of a full submission; drop the rest.
+
+    Graphics, XBRL and other exhibits make up most of a submission's bytes and nothing downstream reads
+    them, so the downloader stores the pruned file. A single document is returned unchanged.
+    """
+    first = re.search(r"<DOCUMENT>", raw, re.I)
+    if first is None:
+        return raw
+    target = form.upper().replace("/A", "")
+    kept = []
+    for m in _DOC_RE.finditer(raw):
+        dtype = _TYPE_RE.search(m.group(1))
+        name = dtype.group(1).upper() if dtype else ""
+        body = _TEXT_RE.search(m.group(1))
+        if (name.replace("/A", "") == target or _PRESS_TYPE.match(name)) and _readable(body.group(1) if body else ""):
+            kept.append(m.group(0))
+    return raw[: first.start()] + "\n".join(kept) + "\n"
 
 
 def looks_like_html(raw: str) -> bool:

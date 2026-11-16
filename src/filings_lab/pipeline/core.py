@@ -5,12 +5,14 @@ import re
 
 import pandas as pd
 
+from .. import storage
 from ..prices.events import add_labels, daily_returns, event_returns
 from ..text.chunk import chunk_section
-from ..text.clean import clean_filing
+from ..text.clean import clean_filing, press_release_text
 from ..text.sections import key_sections
 
 FALLBACK_CHARS = 60_000
+EARNINGS_SECTION = "8k_results_of_operations"
 _WORD = re.compile(r"[A-Za-z][A-Za-z'\-]+")
 
 SECTION_COLUMNS = ["accession", "cik", "form", "section", "text", "n_chars", "n_words"]
@@ -20,6 +22,14 @@ PARAGRAPH_COLUMNS = ["paragraph_id", "accession", "cik", "form", "section", "par
 def process_document(raw: str, accession: str, cik: int, form: str) -> tuple[list[dict], list[dict]]:
     text = clean_filing(raw, form)
     secs = key_sections(text, form)
+    if form.upper().startswith("8-K"):
+        # Item 2.02 furnishes the press release by reference, so the release is that item's text. A release
+        # filed under another item stays a section of its own.
+        press = press_release_text(raw)[:FALLBACK_CHARS]
+        if press and EARNINGS_SECTION in secs:
+            secs[EARNINGS_SECTION] = f"{secs[EARNINGS_SECTION]}\n\n{press}"
+        elif press:
+            secs["8k_press_release"] = press
     if not secs:  # keep something searchable even when headers are non standard
         secs = {"full_text": text[:FALLBACK_CHARS]}
     sections, paragraphs = [], []
@@ -39,7 +49,7 @@ def process_partition(batch: pd.DataFrame, reader) -> tuple[pd.DataFrame, pd.Dat
     for row in batch.itertuples(index=False):
         raw = row.content if "content" in batch.columns else reader(row.raw_uri)
         if isinstance(raw, (bytes, bytearray)):
-            raw = raw.decode("utf-8", errors="replace")
+            raw = storage.gunzip_if_needed(bytes(raw)).decode("utf-8", errors="replace")
         try:
             s, p = process_document(raw, row.accession, row.cik, row.form)
         except Exception as exc:  # one bad document must not kill a 10 year backfill

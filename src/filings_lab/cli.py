@@ -46,7 +46,8 @@ def cmd_download(a):
     from .edgar.download import download_filings
 
     idx = storage.read_parquet(a.index)
-    out = download_filings(EdgarClient(), idx, a.raw, workers=a.workers)
+    out = download_filings(EdgarClient(), idx, a.raw, workers=a.workers, exhibits=not a.no_exhibits,
+                           compress=a.compress)
     storage.write_parquet(out, a.index)
     print(out["download_status"].str.split(":").str[0].value_counts())
 
@@ -55,10 +56,10 @@ def cmd_prices(a):
     import pandas as pd
 
     from .prices.build import build_prices
-    from .prices.sources import CsvPriceSource, StooqPriceSource
+    from .prices.sources import CsvPriceSource, StooqPriceSource, YahooPriceSource
 
     idx = pd.read_parquet(a.index)
-    source = CsvPriceSource(a.path) if a.source == "csv" else StooqPriceSource()
+    source = {"csv": lambda: CsvPriceSource(a.path), "stooq": StooqPriceSource, "yahoo": YahooPriceSource}[a.source]()
     prices, report = build_prices(idx, source, a.start, a.end, a.market)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     prices.to_parquet(a.out, index=False)
@@ -121,7 +122,7 @@ def cmd_sql(a):
     print(run_sql(a.file, a.lake, a.artifacts).to_string(index=False))
 
 
-COMMANDS = {}
+COMMANDS: dict = {}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -150,11 +151,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--index", required=True)
     s.add_argument("--raw", required=True)
     s.add_argument("--workers", type=int, default=4)
+    s.add_argument("--no-exhibits", action="store_true", help="fetch only the primary document of an 8-K")
+    s.add_argument("--compress", action="store_true", help="store raw filings gzip compressed")
     s.set_defaults(fn=cmd_download)
 
     s = sub.add_parser("prices", help="daily prices for every ticker in the index plus the market proxy")
     s.add_argument("--index", required=True)
-    s.add_argument("--source", choices=["stooq", "csv"], default="stooq")
+    s.add_argument("--source", choices=["yahoo", "stooq", "csv"], default="yahoo")
     s.add_argument("--path", help="vendor CSV file or directory of TICKER.csv files (source csv)")
     s.add_argument("--start", default="2013-01-01")
     s.add_argument("--end", default="2024-12-31")

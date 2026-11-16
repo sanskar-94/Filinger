@@ -50,12 +50,47 @@ once, politely, resumably; then let Spark use every core on files already in S3.
 
 | Command | Builds |
 |---|---|
-| `flab prices --index ... --source stooq` or `--source csv --path vendor/` | daily closes for every ticker in the index plus the market proxy, with a coverage report; refuses to continue without the market proxy |
+| `flab prices --index ... --source yahoo` or `--source csv --path vendor/` | split and dividend adjusted daily closes for every ticker in the index plus the market proxy, with a coverage report; refuses to continue without the market proxy. Stooq, the first free source, now answers scripts with a browser check and finds nothing |
+| `flab download --index ... --raw ... --compress` | raw filings, gzip compressed; an 8-K is fetched as its full submission and pruned to the 8-K and its EX-99 exhibits |
 | `flab facts --index ...` or `--bulk companyfacts.zip` | XBRL fundamentals per company from the API or the nightly bulk archive |
 | `flab spark-features --lake s3://...` | the gold feature table in Spark (`groupBy(cik).applyInPandas` for text, `cogroup` for point in time fundamentals, native expressions for the rest) |
 
 The event study also records CAR[+1,+2], the part of the reaction a trader can capture by entering at the
 first close after the filing; the backtest in Phase 2 trades that, not CAR[0,+2].
+
+## The press release exhibit
+
+An earnings 8-K says almost nothing itself. Item 2.02 is one sentence furnishing a press release as Exhibit 99.1,
+and the results, the guidance and management's commentary are all in that exhibit, a separate document of the
+submission. The first version downloaded and parsed only the primary document, so on real filings the earnings
+section would have held that one sentence and the guidance features, the only group that survives correction in
+Phase 2, would have been empty. The synthetic world hid this because its generator writes the release into the
+8-K itself.
+
+Now `flab download` fetches the whole submission for an 8-K and keeps the 8-K and its readable EX-99 exhibits
+(graphics, XBRL and other exhibits are most of the bytes and nothing reads them). `process_document` appends the
+release to the Item 2.02 section, after the item's own sentence so existing paragraph ids hold, or stores it as
+`8k_press_release` when the 8-K has no Item 2.02. `tests/test_exhibits.py` builds a submission as EDGAR ships
+one (SGML wrapper, cover 8-K, EX-99.1, a uuencoded graphic, an XBRL schema) and checks all of it, including that
+both runners read a compressed raw file.
+
+## Checked against real EDGAR so far
+
+On 15 November 2026, for Apple, Microsoft and Nvidia, 2019 to 2024:
+
+1. The submissions parser built a real index of 190 filings (132 8-Ks, 44 10-Qs, 14 10-Ks) with acceptance times.
+2. `YahooPriceSource` returned adjusted prices for all three and the market proxy; Apple's four for one split of
+   August 2020 shows no jump in the series.
+3. The event study produced 190 real events. Earnings 8-Ks move about twice as much as other filings (mean
+   absolute 3 day abnormal return 5.1% against 2.8%), and Nvidia's release of 24 May 2023, accepted after the close,
+   lands on 25 May with a day 0 return of plus 24.4%, as it should.
+4. The XBRL parser read Apple's company facts (1,622 rows).
+
+Not yet done: downloading and parsing real filing documents. The SEC serves its filing archive only to tools
+that declare a contact in the User-Agent, and none was configured where this was built. `scripts/real_run.sh`
+runs the whole lab on 100 large companies (`configs/universe_large_cap.txt`, 2015 to 2024) once `SEC_USER_AGENT`
+is set: index, download, prices, fundamentals, lake, features, quality gates and the walk forward model. That
+universe is today's large companies, so it is survivorship biased, and the script says so.
 
 ## Data quality gates (`flab dq`)
 
@@ -79,12 +114,19 @@ flab local --index data/synthetic/index.parquet --prices data/synthetic/prices.p
 flab sql sql/01_coverage.sql
 ```
 
+Real EDGAR on one machine, every stage in one resumable command:
+
+```bash
+export SEC_USER_AGENT="Your Org you@example.com"
+bash scripts/real_run.sh
+```
+
 Real EDGAR, then Spark:
 
 ```bash
 export SEC_USER_AGENT="Your Org you@example.com"
 flab index --tickers universe.txt --start 2014-01-01 --end 2024-12-31 --out data/lake/bronze/index.parquet
-flab download --index data/lake/bronze/index.parquet --raw data/lake/bronze/raw
+flab download --index data/lake/bronze/index.parquet --raw data/lake/bronze/raw --compress
 spark-submit -m filings_lab.pipeline.spark_job --index ... --raw ... --prices ... --lake s3://bucket/lake
 ```
 

@@ -36,3 +36,8 @@ def filing_document(cik: int | str, accession: str, document: str) -> str:
 def full_submission_txt(path: str) -> str:
     """``path`` is the Filename column of master.idx, e.g. edgar/data/320193/0000320193-20-000096.txt"""
     return f"{SEC}/Archives/{path}"
+
+
+def submission_txt(cik: int | str, accession: str) -> str:
+    """The full submission (every document of the filing, exhibits included) by accession number."""
+    return f"{SEC}/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/{accession}.txt"

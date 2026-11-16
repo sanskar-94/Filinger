@@ -6,23 +6,32 @@ with a shared budget) fills ``raw/``; Spark then processes it at full parallelis
 """
 from __future__ import annotations
 
+import gzip
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
 from .. import storage
+from ..text.clean import prune_submission
 from . import urls
+
+EXHIBIT_FORMS = ("8-K",)  # forms whose substance is in an exhibit, so the whole submission is fetched
 
 
 def raw_uri(raw_root: str, cik: int, accession: str) -> str:
     return storage.join(raw_root, str(int(cik)), f"{accession}.txt")
 
 
-def download_filings(client, index: pd.DataFrame, raw_root: str, workers: int = 4) -> pd.DataFrame:
+def download_filings(client, index: pd.DataFrame, raw_root: str, workers: int = 4, exhibits: bool = True,
+                     compress: bool = False) -> pd.DataFrame:
     """Download each filing in ``index`` (needs cik, accession and either primary_document or path).
 
     Returns the index with a ``raw_uri`` column and a ``download_status`` column. Already present files are
     skipped, so the job can be resumed after interruption.
+
+    With ``exhibits`` an 8-K is fetched as its full submission and pruned to the 8-K itself plus its EX-99
+    exhibits, because the press release is where an earnings 8-K says anything. ``compress`` stores gzip
+    under the same name; every reader detects it, so a lake can mix both.
     """
 
     def _one(row) -> tuple[str, str]:
@@ -30,13 +39,19 @@ def download_filings(client, index: pd.DataFrame, raw_root: str, workers: int = 
         if storage.exists(dest):
             return dest, "cached"
         doc = getattr(row, "primary_document", None)
-        url = (
-            urls.filing_document(row.cik, row.accession, doc)
-            if isinstance(doc, str) and doc
-            else urls.full_submission_txt(row.path)
-        )
+        form = str(getattr(row, "form", "") or "")
+        whole = exhibits and form.upper().startswith(EXHIBIT_FORMS)
+        if whole:
+            url = urls.submission_txt(row.cik, row.accession)
+        elif isinstance(doc, str) and doc:
+            url = urls.filing_document(row.cik, row.accession, doc)
+        else:
+            url = urls.full_submission_txt(row.path)
         try:
-            storage.write_bytes(dest, client.get_bytes(url))
+            data = client.get_bytes(url)
+            if whole:
+                data = prune_submission(data.decode("utf-8", errors="replace"), form).encode("utf-8")
+            storage.write_bytes(dest, gzip.compress(data, 6) if compress else data)
             return dest, "ok"
         except Exception as exc:  # keep going; failures are reported, not fatal
             return dest, f"error: {exc}"

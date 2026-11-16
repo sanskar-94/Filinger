@@ -48,6 +48,15 @@ def read_bytes(uri: str) -> bytes:
     return Path(uri).read_bytes()
 
 
+def gunzip_if_needed(data: bytes) -> bytes:
+    """Raw filings may be stored gzip compressed under the same name; the magic bytes say which."""
+    if data[:2] == b"\x1f\x8b":
+        import gzip
+
+        return gzip.decompress(data)
+    return data
+
+
 def exists(uri: str) -> bool:
     """True for an existing file or object, or a directory or prefix with at least one object under it."""
     if is_remote(uri):
