@@ -16,6 +16,16 @@ jobs:
       - run: pip install ruff
       - run: ruff check src tests scripts loadtest
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      # the gated packages and the named baseline are in pyproject.toml ([tool.mypy])
+      - run: pip install -e ".[dev]"
+      - run: mypy
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -26,7 +36,8 @@ jobs:
         with: {python-version: "${{ matrix.python-version }}", cache: pip}
       # moto's server mode stands in for S3 over real HTTP in tests/test_s3_storage.py
       - run: pip install -e ".[ml,serve,agent,aws,dev]" "moto[server]>=5"
-      - run: pytest -q --durations=10
+      # the floor is a few points under what the suite covers today, so coverage cannot fall quietly
+      - run: pytest -q --durations=10 --cov=filings_lab --cov-report=term --cov-fail-under=68
 
   spark:
     runs-on: ubuntu-latest

@@ -14,3 +14,5 @@ web/node_modules/
 web/.next/
 .env
 web/*.tsbuildinfo
+.coverage
+.mypy_cache/

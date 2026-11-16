@@ -25,7 +25,7 @@ ids from Phase 1.
 |---|---|---|
 | rules | regex and lexicon | free floor; strong on templated language, weak on tone |
 | base | vLLM or transformers, Qwen2.5 3B Instruct or Llama 3.2 3B Instruct | prompt with schema, no fine tuning |
-| fine tuned | same base plus the LoRA adapter (or merged weights) | the distilled student |
+| fine tuned | same base plus the LoRA adapter (or merged weights) | the student |
 | frontier | a hosted frontier model (`FLAB_FRONTIER_MODEL` sets which) | teacher and upper reference |
 
 Frontier calls use structured outputs (`output_config.format` with the strict JSON schema), an explicit
@@ -74,7 +74,8 @@ Face hub, so the whole method was run end to end on a model small enough for fou
 1. `flab llm-pretrain` builds a 4,096 token byte level BPE tokenizer and pretrains a 5.2M parameter Qwen2 style
    model from scratch on the paragraphs of training period filings only (2.1M tokens, 250 steps; held out
    perplexity 1.25, which mostly says the synthetic filings are templated).
-2. Two LoRA configurations fine tune it on 2,745 teacher labelled filings with the compact prompt (the schema
+2. Two LoRA configurations fine tune it on 2,745 labelled filings (the generator's own labels, since the teacher
+   had not run) with the compact prompt (the schema
    instruction without the long field definitions, 1,500 character text budget, so a sample fits 1,024 tokens):
 
 | Adapter | Config | Trainable | Steps | Validation loss | Token accuracy |

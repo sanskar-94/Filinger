@@ -1,12 +1,41 @@
 # Filings Intelligence Lab
 
-Can the language in a company's SEC filings predict its stock's reaction? The lab answers that three ways,
-in one system built in six phases: a classical model with honest statistics, a fine tuned small LLM that
-extracts structured signals, and an analyst agent that answers questions with citations to the exact
-filing paragraph. Everything runs end to end on a laptop against a synthetic EDGAR shaped world, and the
-same code points at real EDGAR, S3, Databricks or EMR, EKS and a GPU for production scale.
+[![ci](https://github.com/sanskar-94/Filinger/actions/workflows/ci.yml/badge.svg)](https://github.com/sanskar-94/Filinger/actions/workflows/ci.yml)
+
+Can the language in a company's SEC filings predict how its stock reacts? One system answers that three ways:
+a classical model with honest statistics, a small LLM fine tuned to extract structured signals, and an analyst
+agent whose every statement links to the filing paragraph it came from.
 
 ![Analyst app](docs/img/ask.png)
+
+## What has run, and what has not
+
+Every number below comes from a synthetic EDGAR shaped world (60 companies, 2012 to 2024) that plants a weak,
+known link between language and returns. It checks the machinery against a known answer. It is not a claim about
+markets.
+
+| Part | Status |
+|---|---|
+| Pipeline, features, quality gates, walk forward model, statistics | Run end to end on the synthetic world. The Spark and S3 paths produce the same tables as the local run (tests against PySpark and an S3 server) |
+| Real EDGAR | The index, price, event study and XBRL code has run on real data for three companies (190 real filing events). Real filing documents have not been downloaded yet: the SEC needs a declared contact, then `bash scripts/real_run.sh` runs the lab on 100 large companies |
+| LoRA fine tune | Run for real: Qwen2.5 3B in 4 bit, with MLX, on an 8 GB Mac. It learned from the generator's own labels |
+| Frontier teacher | The labelling path is written and 60 filings were labelled once as a reference. The teacher run that would make this a distillation has not happened |
+| Retrieval | BM25, dense and hybrid retrieval run and compared on 1,012 query and company pairs |
+| Analyst agent | The offline extractive agent is run and scored on 240 questions with known answers. The hosted model loop is tested against a scripted client only; `flab agent-eval --agent claude` scores it on the same questions |
+| Serving | The API, registry, drift checks and a load test have run in the container as the cluster would run it. vLLM on a GPU has not; a CPU stand in with the same routes served the adapters |
+| Kubernetes, EKS, Terraform, Databricks, EMR | Written, and validated in CI where a validator exists (kubeconform, terraform validate, promtool). Never applied to a cloud account |
+| A/B experiment | Assignment, logging and the readout run on simulated users |
+| Dashboards | Star schema exports with DAX and Tableau kits. No dashboard is published |
+
+## Results so far (synthetic world)
+
+| Question | Result | Where |
+|---|---|---|
+| Does filing text add to price and filing type features? | AUC 0.569 [0.552, 0.587] against 0.500 for the null model; paired DeLong p below 1e-9 | [phase 2](docs/phases/phase2_baseline.md) |
+| Is that tradable? | Barely: break even at 13.6 bps per side, because most of the reaction lands on day 0 | [phase 2](docs/phases/phase2_baseline.md) |
+| Does fine tuning a 3B model work? | Schema valid output goes from 0% to 100% and the extraction score to 0.854, a tie with the rules at 0.860, so production stays on the rules | [phase 3](docs/phases/phase3_llm.md) |
+| Does dense retrieval find what keyword search cannot? | On paraphrased questions nDCG@10 is 0.118 for BM25 and 0.613 for hybrid; on keyword style questions they are equal | [phase 5](docs/phases/phase5_agent.md) |
+| Does the agent cite the right paragraph? | The offline agent gets 0.925 to 1.000 of dated guidance questions right once the question's month scopes the search, and it cannot yet say "not disclosed" | [phase 5](docs/phases/phase5_agent.md) |
 
 ## Architecture
 
@@ -50,12 +79,12 @@ flowchart LR
 
 | Phase | What is built | Where | Doc |
 |---|---|---|---|
-| 1 Data at scale | Rate limited EDGAR client, bulk and API index builders, price and XBRL ingestion commands, HTML and inline XBRL cleaning, TOC aware section extraction, stable paragraph ids, acceptance time event alignment with informational and tradable CARs, PySpark jobs for the lake and the features (both proven equal to the local build), 22 data quality gates with a leakage canary, Databricks bundle, EMR steps, Terraform, DuckDB SQL | `pipeline/`, `edgar/`, `text/`, `prices/`, `infra/` | [phase1](docs/phases/phase1_data.md) |
+| 1 Data at scale | Rate limited EDGAR client, bulk and API index builders, price and XBRL ingestion commands, HTML and inline XBRL cleaning, TOC aware section extraction, press release exhibits of 8-Ks, stable paragraph ids, acceptance time event alignment with informational and tradable CARs, PySpark jobs for the lake and the features (both proven equal to the local build), 22 data quality gates with a leakage canary, Databricks bundle, EMR steps, Terraform, DuckDB SQL | `pipeline/`, `edgar/`, `text/`, `prices/`, `infra/` | [phase1](docs/phases/phase1_data.md) |
 | 2 Classical baseline and statistics | Lexicon, change, rule and point in time XBRL features; purged walk forward LightGBM with purged k fold tuning; DeLong, Newey West, bootstrap, Diebold Mariano, permutation and Benjamini Hochberg tests; calibration; a cost aware tradable backtest; ablations and SHAP | `features/`, `modeling/`, `sql/` | [phase2](docs/phases/phase2_baseline.md) |
 | 3 Fine tune an LLM | Strict signal schema, evidence selection, frontier model teacher with structured outputs and batch labelling, human review with Cohen's kappa, TRL and PEFT LoRA or QLoRA trainer, a small model pretrained from scratch and fine tuned end to end on CPU (format learned, content not: the gate keeps the rules), Qwen2.5 3B in 4 bit fine tuned with MLX on an 8 GB Mac (ties the rules, registered as challenger), eval harness with grounding checks, gold set fingerprints and a regression gate, adapters registered in MLflow with lineage | `llm/`, `configs/` | [phase3](docs/phases/phase3_llm.md) |
 | 4 Serve it in production | FastAPI with circuit breaker, fallback and per quote grounding, vLLM with multi LoRA (and an OpenAI compatible CPU stand in that served the fine tuned adapters here), MLflow tracking and alias registry, live and batch drift with retrain recommendations, Prometheus with unit tested alerts and Grafana, hardened containers verified as the cluster runs them, Kubernetes with HPA, KEDA and CronJobs, EKS Terraform with least privilege roles, load test, CI gate with GitOps promotion | `serving/`, `infra/k8s`, `infra/eks`, `loadtest/`, `.github/` | [phase4](docs/phases/phase4_serving.md) |
-| 5 Analyst agent and app | Tools for search, paragraphs, filings, prices, event returns, live extraction and model signals; LLM tool loop with verified citations; offline mode; Next.js and TypeScript app with filing viewer, experiment page and review page | `agent/`, `web/` | [phase5](docs/phases/phase5_agent.md) |
-| 6 Experiment and dashboard | Sticky assignment with a model version per variant, per replica event logs merged from S3 with signed request ids, power analysis, readout with clustered intervals, SRM check, mSPRT with confidence sequences and a maximum sample, guardrails and a treatment integrity check; BI star schema, DAX and Tableau kits; published dashboard | `experiment/`, `dashboards/` | [phase6](docs/phases/phase6_experiment.md) |
+| 5 Analyst agent and app | Tools for search, paragraphs, filings, prices, event returns, live extraction and model signals; BM25, dense and hybrid retrieval with a measured comparison; LLM tool loop with verified citations; offline mode; an agent evaluation on questions with known answers; Next.js and TypeScript app with filing viewer, experiment page and review page | `agent/`, `web/` | [phase5](docs/phases/phase5_agent.md) |
+| 6 Experiment and dashboard | Sticky assignment with a model version per variant, per replica event logs merged from S3 with signed request ids, power analysis, readout with clustered intervals, SRM check, mSPRT with confidence sequences and a maximum sample, guardrails and a treatment integrity check; BI star schema, DAX and Tableau kits | `experiment/`, `dashboards/` | [phase6](docs/phases/phase6_experiment.md) |
 
 Research and design decisions, with sources: [docs/RESEARCH.md](docs/RESEARCH.md).
 
@@ -126,22 +155,40 @@ trained with MLX, from a fresh clone in one command (environment, lake, fine tun
 bash scripts/mac_full_run.sh
 ```
 
+The retrieval comparison and the agent evaluation (the first needs `pip install -e ".[dense]"`):
+
+```bash
+flab retrieval-eval --lake data/lake --out eval/retrieval
+```
+
+```bash
+flab agent-eval --lake data/lake --out eval/agent --retrieval bm25,dense,hybrid
+```
+
 ## Running on real data
+
+One machine, every stage, resumable, about 1 GB of compressed raw filings for 100 large companies:
 
 ```bash
 export SEC_USER_AGENT="Your Org you@example.com"
 ```
 
 ```bash
+bash scripts/real_run.sh
+```
+
+Or stage by stage, for a larger universe and Spark:
+
+```bash
 flab index --tickers universe.txt --start 2014-01-01 --end 2024-12-31 --out data/lake/bronze/index.parquet
 ```
 
 ```bash
-flab download --index data/lake/bronze/index.parquet --raw data/lake/bronze/raw
+flab download --index data/lake/bronze/index.parquet --raw data/lake/bronze/raw --compress
 ```
 
 ```bash
-flab prices --index data/lake/bronze/index.parquet --source csv --path vendor_prices/
+flab prices --index data/lake/bronze/index.parquet --source yahoo
 ```
 
 ```bash
@@ -173,12 +220,15 @@ Job in `infra/k8s/jobs`), and CI runs every step of it and of `scripts/mac_finet
 ## Quality
 
 ```bash
-pytest -q
+pytest -q --cov=filings_lab
 ruff check src tests scripts
+mypy
 cd web && npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-CI runs these on Python 3.11 to 3.13 (S3 tests against a moto server included), plus the PySpark parity tests
+CI runs these on Python 3.11 to 3.13 (S3 tests against a moto server included, with a coverage floor of 68%; the
+suite covers 73% of the package), a type check that gates the data, text, feature and agent packages and names the
+rest as a baseline still to clean, plus the PySpark parity tests
 on Java 17, the LoRA smoke and local LLM server tests on CPU PyTorch, the end to end script, kubeconform on the
 rendered Kubernetes overlays, a check that generated Kubernetes objects match their sources, promtool alert
 rule unit tests, terraform validate, and the model gate (with the data quality gates) on every change to
@@ -191,9 +241,10 @@ models, features or training code.
 2. Data science: leakage safe event labels, purged walk forward validation, and significance testing that
    separates a real signal from noise, followed by an A/B test analysed with clustered intervals, power
    analysis and sequential testing, published to a BI dashboard.
-3. ML and AI engineering: distilling a frontier model into a LoRA fine tuned 3B model with an eval harness,
-   serving it with vLLM on Kubernetes behind a gated CI/CD pipeline with drift monitoring, and an agent that
-   cites its sources, in a TypeScript app.
+3. ML and AI engineering: a 3B model fine tuned with LoRA behind an eval harness and a promotion gate that kept
+   it out of production, hybrid retrieval and an agent measured on questions with known answers, a serving stack
+   written for vLLM on Kubernetes with drift monitoring, and a TypeScript app in which every claim links to its
+   source paragraph.
 
 ## Repository layout
 
@@ -207,6 +258,7 @@ configs/           LoRA and QLoRA configs, experiment config
 models/            production and candidate model records (GitOps promotion)
 dashboards/        BI star schema exports, Power BI and Tableau kits
 sql/               DuckDB analysis queries over the lake
+eval/              committed evaluation results: 3B fine tune, frontier sample, retrieval, agent
 docs/              research notes, one document per phase
 loadtest/          Locust profile of the analyst request mix
 Makefile           entry points; scripts/e2e.sh runs everything on a tiny world
