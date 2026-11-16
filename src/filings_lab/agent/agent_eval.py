@@ -125,14 +125,38 @@ def score_answer(q: dict, ans: dict) -> dict:
     return out
 
 
-def run_agent(agent, questions: list[dict], system: str, log=None) -> pd.DataFrame:
+def run_agent(agent, questions: list[dict], system: str, log=None, workers: int = 1) -> pd.DataFrame:
+    """Ask every question and score the answers. ``agent`` is an agent, or with ``workers`` above one a function
+    that makes one: each thread needs its own, because a tool box remembers the paragraphs of the request in hand."""
+    def one(a, q) -> dict:
+        ans = a.ask(q["question"], q["ticker"]).to_dict()
+        return {"system": system, "id": q["id"], "type": q["type"], **score_answer(q, ans),
+                "turns": ans.get("turns", 0), "tool_calls": len(ans.get("tool_calls") or []),
+                "answer": (ans.get("answer") or "")[:600]}
+
     rows = []
-    for n, q in enumerate(questions, start=1):
-        ans = agent.ask(q["question"], q["ticker"]).to_dict()
-        rows.append({"system": system, "id": q["id"], "type": q["type"], **score_answer(q, ans),
-                     "answer": (ans.get("answer") or "")[:600]})
-        if log and n % 50 == 0:
-            log(f"{system}: {n} of {len(questions)} questions")
+    if workers <= 1:
+        single = agent() if callable(agent) and not hasattr(agent, "ask") else agent
+        for n, q in enumerate(questions, start=1):
+            rows.append(one(single, q))
+            if log and n % 50 == 0:
+                log(f"{system}: {n} of {len(questions)} questions")
+    else:
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        local = threading.local()
+
+        def task(q):
+            if not hasattr(local, "agent"):
+                local.agent = agent()
+            return one(local.agent, q)
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for n, row in enumerate(pool.map(task, questions), start=1):
+                rows.append(row)
+                if log and n % 20 == 0:
+                    log(f"{system}: {n} of {len(questions)} questions")
     return pd.DataFrame(rows)
 
 
@@ -160,7 +184,9 @@ def summarise(rows: pd.DataFrame) -> dict:
         out["systems"][s] = {"types": per_type, **extra,
                              "macro_score": float(np.mean([v["mean"] for v in per_type.values()])),
                              "citation_valid_rate": float(d["citation_valid_rate"].mean()),
-                             "errors": int(d["error"].sum()), "latency_p50_s": float(d["latency_s"].median()),
+                             "errors": int(d["error"].sum()), "mean_turns": float(d["turns"].mean()),
+                             "empty_answers": int((d["answer"].fillna("").str.len() == 0).sum()),
+                             "latency_p50_s": float(d["latency_s"].median()),
                              "latency_p95_s": float(d["latency_s"].quantile(0.95)), "cost_usd": float(d["cost_usd"].sum())}
     base = systems[0]
     for s in systems[1:]:
@@ -190,11 +216,11 @@ def report_md(summary: dict, info: dict) -> str:
         cells = [f"{d['types'][t]['mean']:.3f} [{d['types'][t]['ci_low']:.3f}, {d['types'][t]['ci_high']:.3f}]" for t in HEADLINE]
         lines.append(f"| {s} | " + " | ".join(cells) + f" | {d['macro_score']:.3f} | {d['citation_valid_rate']:.3f} |")
     lines += ["", "| System | Guidance: right paragraph cited | Guidance: cited first | Disclosure: share of citations that state it | "
-              "Latency p50 / p95 (s) | Cost (USD) | Errors |", "|---|---|---|---|---|---|---|"]
+              "Turns per question | Latency p50 / p95 (s) | Cost (USD) | Errors | Empty answers |", "|---|---|---|---|---|---|---|---|---|"]
     for s, d in summary["systems"].items():
         lines.append(f"| {s} | {d['guidance_support_cited']:.3f} | {d['guidance_first_citation_correct']:.3f} | "
-                     f"{d['disclosure_citation_precision']:.3f} | {d['latency_p50_s']:.3f} / {d['latency_p95_s']:.3f} | "
-                     f"{d['cost_usd']:.2f} | {d['errors']} |")
+                     f"{d['disclosure_citation_precision']:.3f} | {d['mean_turns']:.1f} | {d['latency_p50_s']:.3f} / "
+                     f"{d['latency_p95_s']:.3f} | {d['cost_usd']:.2f} | {d['errors']} | {d['empty_answers']} |")
     if summary["paired"]:
         lines += ["", "| Paired difference on the same questions | " + " | ".join(t for t in HEADLINE) + " |",
                   "|---|" + "---|" * len(HEADLINE)]
@@ -209,7 +235,8 @@ def report_md(summary: dict, info: dict) -> str:
 
 
 def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hybrid"), agent: str = "offline",
-             per_type: int = 40, seed: int = 0, embed_model: str | None = None, client=None, log=print) -> dict:
+             per_type: int = 40, seed: int = 0, embed_model: str | None = None, client=None, log=print,
+             workers: int = 1) -> dict:
     from .agent import AGENT_MODEL, ClaudeAgent, ExtractiveAgent
     from .embeddings import get_embedder
     from .openai_agent import OpenAIChatAgent
@@ -227,8 +254,14 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
         if agent == "claude":
             frames.append(run_agent(ClaudeAgent(ToolBox(store, index), client=client), questions, f"{AGENT_MODEL}, {mode}", log))
         elif agent == "openai":
-            hosted = OpenAIChatAgent(ToolBox(store, index), client=client)
-            frames.append(run_agent(hosted, questions, f"{hosted.model}, {mode}", log))
+            from ..openai_compat import ChatClient
+
+            shared = client or ChatClient()  # one client, so every thread draws on the same request budget
+
+            def make(index=index, shared=shared):
+                return OpenAIChatAgent(ToolBox(store, index), client=shared)
+
+            frames.append(run_agent(make, questions, f"{default_model()}, {mode}", log, workers=workers))
         else:
             for scoped in (False, True):
                 name = f"offline, {mode}" + (", dated questions scoped" if scoped else "")

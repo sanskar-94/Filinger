@@ -91,6 +91,10 @@ def test_tools_translate_and_arguments_are_forgiven():
     assert tools[0]["function"]["parameters"]["required"][0] == "query"
     assert clean_arguments("search_filings", '{"query": "guidance", "top_k": 3}') == {"query": "guidance"}  # an invented key is dropped
     assert clean_arguments("get_paragraph", {"paragraph_id": "abc"}) == {"paragraph_id": "abc"}
+    # seen on the first live calls: the text "None" for an empty filter, and a number sent as text
+    live = clean_arguments("search_filings", '{"query": "guidance", "ticker": "AIZ", "form": "None", "date_from": "null", "k": "5"}')
+    assert live == {"query": "guidance", "ticker": "AIZ", "form": None, "date_from": None, "k": 5}
+    assert clean_arguments("get_paragraph", {"paragraph_id": "None"}) == {"paragraph_id": "None"}  # only nullable arguments
     with pytest.raises(ValueError):
         clean_arguments("search_filings", "{not json")
 
@@ -165,8 +169,8 @@ def test_labelling_through_the_api_spec_resumes(small_lake, tmp_path, monkeypatc
     from filings_lab.llm.providers import OpenAICompatExtractor, RuleExtractor
 
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
-    ex = llm_cli.make_system("api:meta/llama-3.3-70b-instruct")
-    assert isinstance(ex, OpenAICompatExtractor) and ex.name == "api:meta/llama-3.3-70b-instruct" and ex.client.key == "nvapi-test"
+    ex = llm_cli.make_system("api:nvidia/nemotron-3-ultra-550b-a55b")
+    assert isinstance(ex, OpenAICompatExtractor) and ex.name == "api:nvidia/nemotron-3-ultra-550b-a55b" and ex.client.key == "nvapi-test"
 
     seen = []
 
@@ -178,7 +182,7 @@ def test_labelling_through_the_api_spec_resumes(small_lake, tmp_path, monkeypatc
     ex.client = Chat()
     inputs, _ = llm_cli._inputs(str(small_lake), 4000)
     bad = ex.extract(next(iter(inputs.values())))
-    assert seen == ["meta/llama-3.3-70b-instruct"] and not bad.json_valid and bad.input_tokens == 5
+    assert seen == ["nvidia/nemotron-3-ultra-550b-a55b"] and not bad.json_valid and bad.input_tokens == 5
 
     monkeypatch.setattr(llm_cli, "make_system", lambda spec, style="full": RuleExtractor())
     out = tmp_path / "labels.jsonl"
@@ -206,3 +210,50 @@ def test_console_entry_point_keeps_exit_codes_and_output(tmp_path):
     assert unknown.returncode == 2 and "invalid choice" in unknown.stderr
     crash = flab("local", "--index", "missing.parquet", "--prices", "missing.parquet")
     assert crash.returncode == 1 and "Traceback" in crash.stderr  # an error still shows its traceback
+
+
+def test_agent_concludes_when_the_turn_budget_runs_out(store):
+    """Seen live: a model that kept searching for a disclosure that does not exist returned nothing at all."""
+    from filings_lab.agent.openai_agent import tidy_answer
+
+    ticker = store.index["ticker"].iloc[0]
+    search = {"content": None, "tool_calls": [_call("search_filings", {"query": "going concern", "ticker": ticker})]}
+    still_searching = {"content": "The filings do not disclose any going concern doubt.",
+                       "tool_calls": [_call("search_filings", {"query": "insolvency"})]}
+    chat = ScriptedChat([search, search, still_searching])
+    tb = ToolBox(store, BM25Index(store.paragraphs))
+    ans = OpenAIChatAgent(tb, model="m", client=chat, max_turns=3).ask("Has it flagged a going concern?", ticker)
+    assert ans.turns == 3 and ans.answer == "The filings do not disclose any going concern doubt." and ans.error is None
+    assert len(ans.tool_calls) == 2  # the tool call on the last turn is not run
+    last = chat.bodies[-1]
+    assert last["tool_choice"] == "none" and [b["tool_choice"] for b in chat.bodies[:2]] == ["auto", "auto"]
+    assert last["messages"][-1]["role"] == "user" and "search budget" in last["messages"][-1]["content"]
+    # seen live: a smaller model copied the brackets of the instructions around the id
+    assert tidy_answer("<think>plan</think>Lowered [cite:<E9E5CB809B1CF6D6>] and [cite: e9e5cb809b1cf6d6 ].") == \
+        "Lowered [cite:e9e5cb809b1cf6d6] and [cite:e9e5cb809b1cf6d6]."
+    assert "[cite:3fa2b1c4d5e6f708]" in chat.bodies[0]["messages"][0]["content"]  # the format is shown by example
+
+
+def test_agent_eval_with_workers_gives_each_thread_its_own_tool_box(small_lake, small_world, tmp_path, monkeypatch):
+    import threading
+
+    monkeypatch.setenv("FLAB_OPENAI_MODEL", "meta/test-model")
+    threads = set()
+
+    class Client:
+        def complete(self, **body):
+            threads.add(threading.get_ident())
+            if body["messages"][-1]["role"] == "tool":
+                first = json.loads(body["messages"][-1]["content"])["results"][0]["paragraph_id"]
+                return {"choices": [{"message": {"content": f"It lowered guidance [cite:{first}]"}, "finish_reason": "stop"}], "usage": {}}
+            call = _call("search_filings", {"query": "full year guidance", "ticker": body["messages"][1]["content"].rsplit(" ", 1)[1][:-1]})
+            return {"choices": [{"message": {"content": None, "tool_calls": [call]}, "finish_reason": "tool_calls"}], "usage": {}}
+
+    truth = str(small_world["dir"] / "truth.parquet")
+    one = agent_eval.evaluate(str(small_lake), truth, tmp_path / "w1", modes=["bm25"], agent="openai", per_type=6, client=Client(), log=None)
+    many = agent_eval.evaluate(str(small_lake), truth, tmp_path / "w4", modes=["bm25"], agent="openai", per_type=6, client=Client(),
+                               log=None, workers=4)
+    a, b = one["systems"]["meta/test-model, bm25"], many["systems"]["meta/test-model, bm25"]
+    assert a["citation_valid_rate"] == b["citation_valid_rate"] == 1.0  # no thread saw another's paragraphs as its own
+    assert {t: v["mean"] for t, v in a["types"].items()} == {t: v["mean"] for t, v in b["types"].items()}
+    assert a["mean_turns"] == 2.0 and a["empty_answers"] == 0 and len(threads) > 1

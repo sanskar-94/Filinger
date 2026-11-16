@@ -47,7 +47,7 @@ def _agent_eval(a):
     from .agent_eval import evaluate
 
     summary = evaluate(a.lake, a.truth, a.out, modes=[m.strip() for m in a.retrieval.split(",") if m.strip()],
-                       agent=a.agent, per_type=a.per_type, seed=a.seed, embed_model=a.model)
+                       agent=a.agent, per_type=a.per_type, seed=a.seed, embed_model=a.model, workers=a.workers)
     print(open(f"{a.out}/report.md").read())
     print(json.dumps(summary["info"]))
 
@@ -62,10 +62,20 @@ def _register_agent_eval(p):
     p.add_argument("--retrieval", default="bm25,hybrid", help="retrieval modes to compare, comma separated")
     p.add_argument("--model", default=None, help="embedding model for dense retrieval")
     p.add_argument("--per-type", type=int, default=40, help="questions per question type")
+    p.add_argument("--workers", type=int, default=1,
+                   help="questions asked at once with --agent openai; the client still keeps to the API's request rate")
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(fn=_agent_eval)
 
 
-COMMANDS = {"embed": (_register_embed, "embed the lake's paragraphs into the dense retrieval cache"),
+def _api_models(a):
+    from ..openai_compat import ChatClient, default_model
+
+    for model in ChatClient().models():
+        print(model + ("   (default)" if model == default_model() else ""))
+
+
+COMMANDS = {"api-models": (lambda p: p.set_defaults(fn=_api_models), "list the models the OpenAI compatible API serves right now"),
+            "embed": (_register_embed, "embed the lake's paragraphs into the dense retrieval cache"),
             "retrieval-eval": (_register_retrieval_eval, "compare BM25, dense and hybrid retrieval on the synthetic world"),
             "agent-eval": (_register_agent_eval, "score the analyst agent on questions with known answers")}

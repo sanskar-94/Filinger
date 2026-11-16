@@ -14,7 +14,7 @@ import os
 import time
 
 NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_MODEL = "meta/llama-3.3-70b-instruct"
+DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 RETRY_STATUS = (429, 500, 502, 503, 504)
 
 
@@ -63,5 +63,14 @@ class ChatClient:
                 self.sleep(min(max(wait, 0.0), 60.0))
                 delay = min(delay * 2, 60.0)
                 continue
-            raise ChatError(f"{resp.status_code} from {self.base_url}: {str(getattr(resp, 'text', ''))[:300]}")
+            hint = " Hosted models are retired often: list the live ones with `flab api-models`." if resp.status_code in (404, 410) else ""
+            raise ChatError(f"{resp.status_code} from {self.base_url}: {str(getattr(resp, 'text', ''))[:300]}{hint}")
         raise ChatError("unreachable")
+
+    def models(self) -> list[str]:
+        """Ids of the models this key can call right now."""
+        headers = {"Authorization": f"Bearer {self.key}"} if self.key else {}
+        resp = self.session.get(f"{self.base_url}/models", headers=headers, timeout=self.timeout)
+        if resp.status_code != 200:
+            raise ChatError(f"{resp.status_code} from {self.base_url}/models")
+        return sorted(m["id"] for m in resp.json().get("data", []))

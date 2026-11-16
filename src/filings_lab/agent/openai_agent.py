@@ -4,7 +4,9 @@ The same loop as ``ClaudeAgent``: the model calls the lab's tools, every paragra
 recorded, a citation of an id it was never shown gets one repair turn, and whatever is still invalid is
 returned flagged. What differs is the wire format (``tool_calls`` on the assistant message, one ``tool``
 message per result) and what an open model needs forgiven: arguments left out or invented, arguments that are
-not valid JSON, and reasoning printed inside ``<think>`` tags.
+not valid JSON, the text "None" for an empty argument, reasoning printed inside ``<think>`` tags, and
+citations written with brackets around the id. On the last turn the tools are withdrawn and the model is told
+to answer from what it has, so a search that never ends still produces an answer.
 """
 from __future__ import annotations
 
@@ -17,6 +19,17 @@ from .agent import SYSTEM_PROMPT, AgentAnswer, build_citations
 from .tools import TOOL_DEFS, ToolBox
 
 _THINK = re.compile(r"<think>.*?</think>", re.S | re.I)
+# a citation with decoration around the id: [cite:<id>], [cite: id], [cite:"id"]
+_LOOSE_CITE = re.compile(r"\[cite:\s*[<\"'`]?\s*([0-9a-f]{16})\s*[>\"'`]?\s*\]", re.I)
+CITATION_FORMAT = ("\n\nWrite each citation exactly like [cite:3fa2b1c4d5e6f708]: square brackets, the word cite, a colon and the "
+                   "16 character paragraph id, with nothing around the id.")
+OUT_OF_TURNS = ("You have used your search budget. Answer now from what the tools returned. If the filings you searched do "
+                "not state what was asked, say plainly that they do not disclose it, and do not search again.")
+
+
+def tidy_answer(text: str) -> str:
+    """The model's final text without printed reasoning and with citations in the one form the validator reads."""
+    return _LOOSE_CITE.sub(lambda m: f"[cite:{m.group(1).lower()}]", _THINK.sub("", text or "")).strip()
 
 
 def openai_tools() -> list[dict]:
@@ -24,13 +37,34 @@ def openai_tools() -> list[dict]:
             for t in TOOL_DEFS]
 
 
+_EMPTY = {"none", "null", "nil", "n/a", ""}
+
+
 def clean_arguments(name: str, raw) -> dict:
-    """A tool call's arguments as the tool accepts them: parsed, and without keys the tool does not declare."""
+    """A tool call's arguments as the tool accepts them.
+
+    Parsed, without keys the tool does not declare, and with two habits of open models undone: the text "None"
+    or "null" where a nullable argument should be empty (seen on the first live calls, where it turned every
+    optional filter into a filter on the word None), and a number sent as text.
+    """
     args = json.loads(raw or "{}") if isinstance(raw, str) else dict(raw or {})
     if not isinstance(args, dict):
         raise ValueError("arguments must be a JSON object")
     declared = next((t["input_schema"]["properties"] for t in TOOL_DEFS if t["name"] == name), None)
-    return args if declared is None else {k: v for k, v in args.items() if k in declared}
+    if declared is None:
+        return args
+    out = {}
+    for key, value in args.items():
+        if key not in declared:
+            continue
+        kind = declared[key].get("type")
+        if isinstance(value, str):
+            if isinstance(kind, list) and "null" in kind and value.strip().lower() in _EMPTY:
+                value = None
+            elif kind == "integer" and value.strip().lstrip("-").isdigit():
+                value = int(value)
+        out[key] = value
+    return out
 
 
 class OpenAIChatAgent:
@@ -44,7 +78,7 @@ class OpenAIChatAgent:
         t0 = time.perf_counter()
         self.tb.reset()
         content = question if not ticker else f"{question}\n\n(Company in focus: ticker {ticker.upper()})"
-        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}]
+        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT + CITATION_FORMAT}, {"role": "user", "content": content}]
         calls: list[dict] = []
         tokens_in = tokens_out = turns = 0
         repaired, final_text, stop = False, "", None
@@ -52,14 +86,19 @@ class OpenAIChatAgent:
         try:
             while turns < self.max_turns:
                 turns += 1
-                data = self.client.complete(model=self.model, messages=messages, tools=self.tools, tool_choice="auto",
-                                            temperature=0.0, max_tokens=self.max_tokens)
+                last = turns == self.max_turns
+                if last and messages[-1]["role"] == "tool":
+                    # a model that searches until the budget runs out must still conclude, most of all when the
+                    # honest answer is that the filings do not say; without this the last turn is one more search
+                    messages.append({"role": "user", "content": OUT_OF_TURNS})
+                data = self.client.complete(model=self.model, messages=messages, tools=self.tools,
+                                            tool_choice="none" if last else "auto", temperature=0.0, max_tokens=self.max_tokens)
                 usage = data.get("usage") or {}
                 tokens_in += usage.get("prompt_tokens") or 0
                 tokens_out += usage.get("completion_tokens") or 0
                 choice = data["choices"][0]
                 msg, stop = choice["message"], choice.get("finish_reason")
-                tool_calls = msg.get("tool_calls") or []
+                tool_calls = [] if last else (msg.get("tool_calls") or [])
                 if tool_calls:
                     messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": tool_calls})
                     for n, call in enumerate(tool_calls):
@@ -73,7 +112,7 @@ class OpenAIChatAgent:
                         calls.append({"tool": name, "input": args, "ms": round((time.perf_counter() - c0) * 1000, 1), "error": err})
                         messages.append({"role": "tool", "tool_call_id": call.get("id") or f"call_{turns}_{n}", "content": out})
                     continue
-                final_text = _THINK.sub("", msg.get("content") or "").strip()
+                final_text = tidy_answer(msg.get("content") or "")
                 _, invalid = build_citations(final_text, self.tb)
                 if invalid and not repaired and turns < self.max_turns:
                     repaired = True

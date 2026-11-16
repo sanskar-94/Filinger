@@ -208,7 +208,7 @@ The agent and the labelling run against either of two kinds of hosted model:
 
 | Setting in `.env` | What uses it |
 |---|---|
-| `NVIDIA_API_KEY` (free, from build.nvidia.com) | `flab agent-eval --agent openai`, `flab llm-label --system api:meta/llama-3.3-70b-instruct`, `flab llm-eval --systems rules,api:meta/llama-3.3-70b-instruct`, and the app's agent when no paid key is set. Any OpenAI compatible API works: set `FLAB_OPENAI_BASE_URL` and `FLAB_OPENAI_MODEL` |
+| `NVIDIA_API_KEY` (free, from build.nvidia.com) | `flab agent-eval --agent openai`, `flab llm-label --system api:nvidia/nemotron-3-ultra-550b-a55b`, `flab llm-eval --systems rules,api:nvidia/nemotron-3-ultra-550b-a55b`, and the app's agent when no paid key is set. Any OpenAI compatible API works: set `FLAB_OPENAI_BASE_URL` and `FLAB_OPENAI_MODEL` |
 | `ANTHROPIC_API_KEY` (paid) | the frontier teacher (`flab llm-label`), `flab agent-eval --agent claude`, and the app's agent |
 
 The free tier allows about 40 requests a minute, so the client spaces its requests, backs off on a rate limit, and

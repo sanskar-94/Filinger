@@ -21,7 +21,7 @@ def make_system(spec: str, style: str = "full"):
     mlx:<model>[|<adapter_path>] | replay:<labels.jsonl>, each optionally followed by @name.
 
     ``api`` is a hosted model behind an OpenAI compatible API (``filings_lab/openai_compat.py``): NVIDIA's free
-    endpoints by default, for example ``api:meta/llama-3.3-70b-instruct``.
+    endpoints by default, for example ``api:nvidia/nemotron-3-ultra-550b-a55b``.
 
     ``replay`` scores labels produced elsewhere (an annotator, a batch API results file): one JSON object per line
     with ``accession`` and ``signals``."""
@@ -177,7 +177,7 @@ def _reg_label(p):
     p.add_argument("--out", default="data/teacher/labels.jsonl")
     p.add_argument("--model", default=None)
     p.add_argument("--system", default=None,
-                   help="label with another system spec instead of the frontier model, for example api:meta/llama-3.3-70b-instruct")
+                   help="label with another system spec instead of the frontier model, for example api:nvidia/nemotron-3-ultra-550b-a55b")
     p.add_argument("--mode", choices=["batch", "realtime"], default="batch")
     p.add_argument("--limit", type=int, default=3000)
     p.add_argument("--budget", type=int, default=12_000)
