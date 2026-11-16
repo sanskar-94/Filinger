@@ -170,14 +170,34 @@ class ClaudeAgent:
                            stop, meta={"repaired": repaired})
 
 
+_MONTHS = {m: i for i, m in enumerate(
+    "january february march april may june july august september october november december".split(), start=1)}
+_MONTH_YEAR = re.compile(r"\b(" + "|".join(_MONTHS) + r")\s+(?:of\s+)?((?:19|20)\d{2})\b", re.I)
+_YEAR = re.compile(r"\b(?:in|during|for|of)\s+((?:19|20)\d{2})\b", re.I)
+
+
+def question_period(question: str) -> tuple[str | None, str | None]:
+    """The filing date window a question names: "in May 2019" is that month, "in 2019" that year, else open."""
+    import calendar
+
+    m = _MONTH_YEAR.search(question)
+    if m:
+        month, year = _MONTHS[m.group(1).lower()], int(m.group(2))
+        return f"{year}-{month:02d}-01", f"{year}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
+    y = _YEAR.search(question)
+    if y:
+        return f"{y.group(1)}-01-01", f"{y.group(1)}-12-31"
+    return None, None
+
+
 class ExtractiveAgent:
     """No LLM: retrieve, quote the most relevant sentence of each hit, attach the market reaction."""
 
     PRICE_WORDS = re.compile(r"\b(react|reaction|stock|share price|return|move|moved|market)\b", re.I)
     SIGNAL_WORDS = re.compile(r"\b(guidance|outlook|tone|liquidity|going concern|covenant|litigation|lawsuit|investigation)\b", re.I)
 
-    def __init__(self, toolbox: ToolBox, k: int = 4):
-        self.tb, self.k = toolbox, k
+    def __init__(self, toolbox: ToolBox, k: int = 4, scope_period: bool = True):
+        self.tb, self.k, self.scope_period = toolbox, k, scope_period
 
     def _guess_ticker(self, question: str) -> str | None:
         comps = self.tb.store.companies()
@@ -192,14 +212,17 @@ class ExtractiveAgent:
         t0 = time.perf_counter()
         self.tb.reset()
         ticker = ticker or self._guess_ticker(question)
-        args = {"query": question, "ticker": ticker, "form": None, "date_from": None, "date_to": None, "k": self.k}
+        # a question about "the release filed in May 2019" is searched within May 2019, as an analyst would filter
+        date_from, date_to = question_period(question) if self.scope_period else (None, None)
+        args = {"query": question, "ticker": ticker, "form": None, "date_from": date_from, "date_to": date_to, "k": self.k}
         res = json.loads(self.tb.execute("search_filings", args))["results"]
         calls = [{"tool": "search_filings", "input": args}]
         if not res:
             return AgentAnswer("No filing paragraphs matched the question.", [], [], calls, "offline-extractive",
                                1, time.perf_counter() - t0)
         terms = {t for t in re.findall(r"[a-z]{4,}", question.lower())}
-        missing = self.tb.index.unknown_terms(question)
+        # only a keyword index ranks on shared words alone; with embeddings an unknown word is not a dead end
+        missing = self.tb.index.unknown_terms(question) if getattr(self.tb.index, "lexical_only", True) else []
         lines = []
         if missing:
             lines.append(f"No indexed filing uses the term{'s' if len(missing) > 1 else ''} "

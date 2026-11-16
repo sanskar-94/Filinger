@@ -7,6 +7,7 @@ a fabricated citation detectable rather than merely unlikely.
 from __future__ import annotations
 
 import json
+import re
 
 import numpy as np
 import pandas as pd
@@ -76,6 +77,25 @@ TOOL_DEFS = [
 ]
 
 
+_CORPORATE_SUFFIX = re.compile(r"[\s,]+(inc|corp|corporation|co|company|ltd|plc|llc|group|holdings)\.?$", re.I)
+
+
+def strip_entity(query: str, company: str | None, ticker: str | None) -> str:
+    """Remove a company's own name and ticker from a query that is already filtered to that company.
+
+    Inside one company's filings its name separates nothing, but it is in every "X issued a press release"
+    line, so both rankers score that boilerplate above the paragraph that answers the question.
+    """
+    names = [company or "", _CORPORATE_SUFFIX.sub("", company or "")]
+    out = query
+    for name in sorted({n.strip() for n in names if n.strip()}, key=len, reverse=True):
+        out = re.sub(rf"\b{re.escape(name)}\b\.?(?:'s)?", " ", out, flags=re.I)
+    if ticker:
+        out = re.sub(rf"\b{re.escape(ticker)}\b", " ", out)
+    out = re.sub(r"\s+", " ", out).strip()
+    return out if len(out) >= 3 else query
+
+
 def _clean(v):
     if isinstance(v, (pd.Timestamp,)):
         return v.strftime("%Y-%m-%d")
@@ -88,14 +108,18 @@ def _clean(v):
 
 class ToolBox:
     def __init__(self, store: DataStore, index: BM25Index | None = None, scorer=None, diversify: bool = True,
-                 extractor=None):
+                 extractor=None, strip_names: bool = True):
         self.store = store
         self.index = index or BM25Index(store.paragraphs)
         self.scorer = scorer  # callable(features dict) -> {"probability_up", "drivers"}; optional
         self.diversify = diversify
+        self.strip_names = strip_names  # drop a company's own name from a search already scoped to it
         self.extractor = extractor  # the model version this session serves (A/B variant), optional
         self.seen_ids: set[str] = set()
         self.extraction_log: list[dict] = []  # what actually served each extract_signals call this request
+        idx = store.index
+        self._company_names = ({} if idx.empty else
+                               dict(zip(idx["ticker"].astype(str).str.upper(), idx["company"].astype(str), strict=False)))
 
     def reset(self) -> None:
         self.seen_ids = set()
@@ -118,6 +142,8 @@ class ToolBox:
     # ---------------------------------------------------------------------------------------- tools
     def t_search_filings(self, query, ticker=None, form=None, date_from=None, date_to=None, k=6):
         k = int(min(max(k or 6, 1), 10))
+        if ticker and self.strip_names:
+            query = strip_entity(query, self._company_names.get(ticker.upper()), ticker)
         hits = self.index.search(query, k=k, diversify=self.diversify, ticker=ticker, form=form,
                                  date_from=date_from, date_to=date_to)
         return {"results": [self._para(r) | {"score": round(float(r["score"]), 3)} for _, r in hits.iterrows()]}

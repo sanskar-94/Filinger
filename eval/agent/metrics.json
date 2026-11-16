@@ -1,0 +1,442 @@
+{
+  "info": {
+    "questions": 240,
+    "by_type": {
+      "guidance": 40,
+      "reaction": 40,
+      "disclosure_yes": 80,
+      "disclosure_no": 80
+    },
+    "agent": "offline extractive",
+    "retrieval": [
+      "bm25",
+      "dense",
+      "hybrid"
+    ],
+    "per_type": 40,
+    "seed": 0
+  },
+  "systems": {
+    "offline, bm25": {
+      "types": {
+        "guidance": {
+          "n": 40,
+          "metric": "answer_correct",
+          "mean": 0.625,
+          "ci_low": 0.475,
+          "ci_high": 0.775
+        },
+        "reaction": {
+          "n": 40,
+          "metric": "car_correct",
+          "mean": 0.85,
+          "ci_low": 0.725,
+          "ci_high": 0.95
+        },
+        "disclosure_yes": {
+          "n": 80,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 80,
+          "metric": "abstained",
+          "mean": 0.15,
+          "ci_low": 0.075,
+          "ci_high": 0.225
+        }
+      },
+      "guidance_support_cited": 0.625,
+      "guidance_first_citation_correct": 0.125,
+      "disclosure_citation_precision": 0.6416666666666666,
+      "macro_score": 0.65625,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "latency_p50_s": 0.006126041989773512,
+      "latency_p95_s": 0.023854018747806505,
+      "cost_usd": 0.0
+    },
+    "offline, bm25, dated questions scoped": {
+      "types": {
+        "guidance": {
+          "n": 40,
+          "metric": "answer_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "reaction": {
+          "n": 40,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 80,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 80,
+          "metric": "abstained",
+          "mean": 0.15,
+          "ci_low": 0.075,
+          "ci_high": 0.225
+        }
+      },
+      "guidance_support_cited": 1.0,
+      "guidance_first_citation_correct": 0.225,
+      "disclosure_citation_precision": 0.6416666666666666,
+      "macro_score": 0.7875,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "latency_p50_s": 0.006196500005898997,
+      "latency_p95_s": 0.0167803332878975,
+      "cost_usd": 0.0
+    },
+    "offline, dense": {
+      "types": {
+        "guidance": {
+          "n": 40,
+          "metric": "answer_correct",
+          "mean": 0.05,
+          "ci_low": 0.0,
+          "ci_high": 0.125
+        },
+        "reaction": {
+          "n": 40,
+          "metric": "car_correct",
+          "mean": 0.9,
+          "ci_low": 0.8,
+          "ci_high": 0.975
+        },
+        "disclosure_yes": {
+          "n": 80,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 80,
+          "metric": "abstained",
+          "mean": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        }
+      },
+      "guidance_support_cited": 0.05,
+      "guidance_first_citation_correct": 0.025,
+      "disclosure_citation_precision": 0.5375,
+      "macro_score": 0.48750000000000004,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "latency_p50_s": 0.008072687487583607,
+      "latency_p95_s": 0.03693840833147978,
+      "cost_usd": 0.0
+    },
+    "offline, dense, dated questions scoped": {
+      "types": {
+        "guidance": {
+          "n": 40,
+          "metric": "answer_correct",
+          "mean": 0.475,
+          "ci_low": 0.325,
+          "ci_high": 0.625
+        },
+        "reaction": {
+          "n": 40,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 80,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 80,
+          "metric": "abstained",
+          "mean": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        }
+      },
+      "guidance_support_cited": 0.475,
+      "guidance_first_citation_correct": 0.15,
+      "disclosure_citation_precision": 0.5375,
+      "macro_score": 0.61875,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "latency_p50_s": 0.005495228979270905,
+      "latency_p95_s": 0.021133168085361826,
+      "cost_usd": 0.0
+    },
+    "offline, hybrid": {
+      "types": {
+        "guidance": {
+          "n": 40,
+          "metric": "answer_correct",
+          "mean": 0.075,
+          "ci_low": 0.0,
+          "ci_high": 0.175
+        },
+        "reaction": {
+          "n": 40,
+          "metric": "car_correct",
+          "mean": 0.9,
+          "ci_low": 0.8,
+          "ci_high": 0.975
+        },
+        "disclosure_yes": {
+          "n": 80,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 80,
+          "metric": "abstained",
+          "mean": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        }
+      },
+      "guidance_support_cited": 0.075,
+      "guidance_first_citation_correct": 0.025,
+      "disclosure_citation_precision": 0.5375,
+      "macro_score": 0.49375,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "latency_p50_s": 0.008261770999524742,
+      "latency_p95_s": 0.02709121431398671,
+      "cost_usd": 0.0
+    },
+    "offline, hybrid, dated questions scoped": {
+      "types": {
+        "guidance": {
+          "n": 40,
+          "metric": "answer_correct",
+          "mean": 0.925,
+          "ci_low": 0.825,
+          "ci_high": 1.0
+        },
+        "reaction": {
+          "n": 40,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 80,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 80,
+          "metric": "abstained",
+          "mean": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        }
+      },
+      "guidance_support_cited": 0.925,
+      "guidance_first_citation_correct": 0.15,
+      "disclosure_citation_precision": 0.5375,
+      "macro_score": 0.73125,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "latency_p50_s": 0.010127708490472287,
+      "latency_p95_s": 0.02405448125209658,
+      "cost_usd": 0.0
+    },
+    "offline, hybrid, dated questions scoped, company name kept": {
+      "types": {
+        "guidance": {
+          "n": 40,
+          "metric": "answer_correct",
+          "mean": 0.6,
+          "ci_low": 0.45,
+          "ci_high": 0.75
+        },
+        "reaction": {
+          "n": 40,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 80,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 80,
+          "metric": "abstained",
+          "mean": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        }
+      },
+      "guidance_support_cited": 0.6,
+      "guidance_first_citation_correct": 0.0,
+      "disclosure_citation_precision": 0.525,
+      "macro_score": 0.65,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "latency_p50_s": 0.02282552098040469,
+      "latency_p95_s": 0.07251014825014854,
+      "cost_usd": 0.0
+    }
+  },
+  "paired": {
+    "offline, bm25, dated questions scoped minus offline, bm25": {
+      "guidance": {
+        "diff": 0.375,
+        "ci_low": 0.225,
+        "ci_high": 0.525
+      },
+      "reaction": {
+        "diff": 0.15,
+        "ci_low": 0.05,
+        "ci_high": 0.275
+      },
+      "disclosure_yes": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_no": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "offline, dense minus offline, bm25": {
+      "guidance": {
+        "diff": -0.575,
+        "ci_low": -0.75,
+        "ci_high": -0.4
+      },
+      "reaction": {
+        "diff": 0.05,
+        "ci_low": -0.1,
+        "ci_high": 0.2
+      },
+      "disclosure_yes": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_no": {
+        "diff": -0.15,
+        "ci_low": -0.225,
+        "ci_high": -0.075
+      }
+    },
+    "offline, dense, dated questions scoped minus offline, bm25": {
+      "guidance": {
+        "diff": -0.15,
+        "ci_low": -0.35,
+        "ci_high": 0.05
+      },
+      "reaction": {
+        "diff": 0.15,
+        "ci_low": 0.05,
+        "ci_high": 0.275
+      },
+      "disclosure_yes": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_no": {
+        "diff": -0.15,
+        "ci_low": -0.225,
+        "ci_high": -0.075
+      }
+    },
+    "offline, hybrid minus offline, bm25": {
+      "guidance": {
+        "diff": -0.55,
+        "ci_low": -0.725,
+        "ci_high": -0.375
+      },
+      "reaction": {
+        "diff": 0.05,
+        "ci_low": -0.1,
+        "ci_high": 0.2
+      },
+      "disclosure_yes": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_no": {
+        "diff": -0.15,
+        "ci_low": -0.225,
+        "ci_high": -0.075
+      }
+    },
+    "offline, hybrid, dated questions scoped minus offline, bm25": {
+      "guidance": {
+        "diff": 0.3,
+        "ci_low": 0.125,
+        "ci_high": 0.475
+      },
+      "reaction": {
+        "diff": 0.15,
+        "ci_low": 0.05,
+        "ci_high": 0.275
+      },
+      "disclosure_yes": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_no": {
+        "diff": -0.15,
+        "ci_low": -0.225,
+        "ci_high": -0.075
+      }
+    },
+    "offline, hybrid, dated questions scoped, company name kept minus offline, bm25": {
+      "guidance": {
+        "diff": -0.025,
+        "ci_low": -0.225,
+        "ci_high": 0.175
+      },
+      "reaction": {
+        "diff": 0.15,
+        "ci_low": 0.05,
+        "ci_high": 0.275
+      },
+      "disclosure_yes": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_no": {
+        "diff": -0.15,
+        "ci_low": -0.225,
+        "ci_high": -0.075
+      }
+    }
+  }
+}

@@ -6,11 +6,12 @@ import hmac
 import os
 import secrets
 import uuid
+from typing import Any
 
 from ..experiment.assign import Experiment
 from ..experiment.log import EventLog
 from .agent import AGENT_MODEL, ClaudeAgent, ExtractiveAgent
-from .retrieval import BM25Index
+from .retrieval import BM25Index, build_index
 from .store import DataStore
 from .tools import ToolBox
 
@@ -19,7 +20,10 @@ class AgentService:
     def __init__(self, store: DataStore, experiment: Experiment | None = None, log: EventLog | None = None,
                  mode: str = "auto", scorer=None, client=None):
         self.store = store
-        self.index = BM25Index(store.paragraphs)
+        self._bm25 = BM25Index(store.paragraphs)
+        self.retrieval = os.environ.get("FLAB_RETRIEVAL", "bm25").lower()
+        self._indexes: dict[str, Any] = {"bm25": self._bm25}
+        self.index = self.index_for(self.retrieval)
         self.experiment, self.log, self.scorer, self.client = experiment, log, scorer, client
         has_key = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
         self.mode = ("claude" if (has_key or client is not None) else "offline") if mode == "auto" else mode
@@ -59,8 +63,21 @@ class AgentService:
                 self._extractors[variant] = RuleExtractor()
         return self._extractors[variant]
 
+    def index_for(self, mode: str):
+        """The index for a retrieval mode, built once. A dense mode that cannot load (no embedding model in this
+        image, no cache in the lake) falls back to BM25 and says so, so a missing model degrades search
+        instead of taking the service down."""
+        if mode not in self._indexes:
+            try:
+                self._indexes[mode] = build_index(self.store.paragraphs, mode, lake=self.store.lake, bm25=self._bm25)
+            except Exception as exc:  # noqa: BLE001 - any failure to build the optional index
+                print(f"retrieval mode {mode!r} unavailable ({exc}); serving bm25")
+                self._indexes[mode] = self._bm25
+        return self._indexes[mode]
+
     def toolbox_for(self, variant: str, cfg: dict) -> ToolBox:
-        return ToolBox(self.store, self.index, scorer=self.scorer, diversify=cfg.get("diversify", True),
+        index = self.index_for(cfg["retrieval"]) if cfg.get("retrieval") else self.index
+        return ToolBox(self.store, index, scorer=self.scorer, diversify=cfg.get("diversify", True),
                        extractor=self.extractor_for(variant, cfg) if self.serve_signals else None)
 
     @classmethod

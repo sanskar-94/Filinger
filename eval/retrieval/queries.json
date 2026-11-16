@@ -1,0 +1,272 @@
+{
+  "needs": [
+    {
+      "need": "guidance_lowered",
+      "sentences": [
+        "The Company is lowering its full year {y} revenue guidance to ${a} billion to ${b} billion.",
+        "We now expect full year {y} results to come in below the low end of our previously issued outlook.",
+        "Given the softer environment, management reduced its fiscal {y} earnings outlook."
+      ],
+      "lexical": [
+        "lowering full year revenue guidance",
+        "reduced earnings outlook below previously issued outlook"
+      ],
+      "paraphrase": [
+        "management cut its sales forecast",
+        "trimmed its annual projections",
+        "expects to miss its earlier targets"
+      ]
+    },
+    {
+      "need": "guidance_raised",
+      "sentences": [
+        "The Company is raising its full year {y} revenue guidance to ${a} billion to ${b} billion.",
+        "Based on the strength of the quarter, we now expect full year {y} results above the high end of our prior outlook.",
+        "Management increased its outlook for fiscal {y} earnings per share."
+      ],
+      "lexical": [
+        "raising full year revenue guidance",
+        "increased outlook for earnings per share"
+      ],
+      "paraphrase": [
+        "management lifted its sales forecast",
+        "boosted its annual projections",
+        "now predicts a better year than it did before"
+      ]
+    },
+    {
+      "need": "guidance_maintained",
+      "sentences": [
+        "The Company reaffirms its full year {y} revenue guidance of ${a} billion to ${b} billion.",
+        "Our outlook for fiscal {y} is unchanged from the guidance provided last quarter."
+      ],
+      "lexical": [
+        "reaffirms full year revenue guidance",
+        "outlook unchanged from guidance provided last quarter"
+      ],
+      "paraphrase": [
+        "kept its forecast the same",
+        "stuck with its earlier annual targets",
+        "no revision to its projections"
+      ]
+    },
+    {
+      "need": "going_concern",
+      "sentences": [
+        "These conditions raise substantial doubt about our ability to continue as a going concern."
+      ],
+      "lexical": [
+        "substantial doubt about ability to continue as a going concern"
+      ],
+      "paraphrase": [
+        "the business may not survive",
+        "danger of insolvency or bankruptcy",
+        "might have to shut down for lack of money"
+      ]
+    },
+    {
+      "need": "covenant_breach",
+      "sentences": [
+        "We were not in compliance with certain financial covenants and have requested a waiver from our lenders."
+      ],
+      "lexical": [
+        "not in compliance with financial covenants requested a waiver from lenders"
+      ],
+      "paraphrase": [
+        "violated the terms of its loans",
+        "broke its debt agreements and asked the banks for relief",
+        "defaulted on borrowing conditions"
+      ]
+    },
+    {
+      "need": "capital_need",
+      "sentences": [
+        "We will need to raise additional capital within the next twelve months to fund our operations, which may not be available on acceptable terms."
+      ],
+      "lexical": [
+        "need to raise additional capital within the next twelve months to fund operations"
+      ],
+      "paraphrase": [
+        "running out of cash and must find new financing",
+        "requires fresh funding soon",
+        "may have to sell shares or borrow to pay its bills"
+      ]
+    },
+    {
+      "need": "class_action",
+      "sentences": [
+        "On {d}, a putative securities class action was filed against the Company and certain officers alleging false and misleading statements."
+      ],
+      "lexical": [
+        "putative securities class action filed against the Company and certain officers"
+      ],
+      "paraphrase": [
+        "shareholders sued the firm and its executives",
+        "investor lawsuit accusing leadership of lying",
+        "stockholders went to court over deceptive disclosures"
+      ]
+    },
+    {
+      "need": "sec_subpoena",
+      "sentences": [
+        "The Company received a subpoena from the Securities and Exchange Commission requesting documents related to revenue recognition."
+      ],
+      "lexical": [
+        "subpoena from the Securities and Exchange Commission requesting documents"
+      ],
+      "paraphrase": [
+        "regulators are investigating the accounting",
+        "government probe into how sales were booked",
+        "federal watchdog demanded records"
+      ]
+    },
+    {
+      "need": "patent_verdict",
+      "sentences": [
+        "A jury returned a verdict against the Company in a patent infringement case and awarded damages of ${a} million, which we intend to appeal."
+      ],
+      "lexical": [
+        "jury returned a verdict in a patent infringement case and awarded damages"
+      ],
+      "paraphrase": [
+        "lost a court case over intellectual property",
+        "ordered to pay after a trial about copied technology",
+        "court ruled against the firm in an IP dispute"
+      ]
+    },
+    {
+      "need": "ceo_departure",
+      "sentences": [
+        "On {d}, the Company announced that its Chief Executive Officer will step down, effective immediately."
+      ],
+      "lexical": [
+        "Chief Executive Officer will step down effective immediately"
+      ],
+      "paraphrase": [
+        "the CEO resigned",
+        "top boss is leaving",
+        "the head of the business quit"
+      ]
+    },
+    {
+      "need": "cfo_appointed",
+      "sentences": [
+        "The Board of Directors appointed a new Chief Financial Officer, effective {d}."
+      ],
+      "lexical": [
+        "Board of Directors appointed a new Chief Financial Officer"
+      ],
+      "paraphrase": [
+        "hired a new finance chief",
+        "named a new CFO",
+        "someone new now runs the finance department"
+      ]
+    },
+    {
+      "need": "supply_contract",
+      "sentences": [
+        "On {d}, the Company entered into a definitive agreement to supply its {p} to a large customer under a multi year contract."
+      ],
+      "lexical": [
+        "definitive agreement to supply a large customer under a multi year contract"
+      ],
+      "paraphrase": [
+        "won a big long term deal with a major buyer",
+        "signed a major sales pact",
+        "landed a significant client for several years"
+      ]
+    },
+    {
+      "need": "credit_facility",
+      "sentences": [
+        "The Company entered into a new credit agreement providing a revolving credit facility of ${a} million."
+      ],
+      "lexical": [
+        "new credit agreement providing a revolving credit facility"
+      ],
+      "paraphrase": [
+        "secured a new bank loan line",
+        "arranged new borrowing capacity",
+        "set up a fresh line of financing with banks"
+      ]
+    },
+    {
+      "need": "buyback",
+      "sentences": [
+        "The Company issued a press release announcing a new share repurchase authorization of ${a} million."
+      ],
+      "lexical": [
+        "press release announcing a new share repurchase authorization"
+      ],
+      "paraphrase": [
+        "plans to buy back its own stock",
+        "returning cash to investors through buybacks",
+        "board approved a stock buyback"
+      ]
+    },
+    {
+      "need": "new_facility",
+      "sentences": [
+        "The Company announced the opening of a new facility to support its {p}."
+      ],
+      "lexical": [
+        "announced the opening of a new facility"
+      ],
+      "paraphrase": [
+        "opened a new plant",
+        "expanding with an additional site",
+        "started operating at a new location"
+      ]
+    },
+    {
+      "need": "impairment",
+      "sentences": [
+        "We recorded an impairment charge related to goodwill associated with our {p}."
+      ],
+      "lexical": [
+        "recorded an impairment charge related to goodwill"
+      ],
+      "paraphrase": [
+        "wrote down the value of an acquired business",
+        "took a writedown on intangible assets",
+        "admitted it overpaid for an acquisition"
+      ]
+    },
+    {
+      "need": "restructuring",
+      "sentences": [
+        "Restructuring charges increased as we reduced headcount and closed underperforming facilities."
+      ],
+      "lexical": [
+        "restructuring charges increased as we reduced headcount and closed underperforming facilities"
+      ],
+      "paraphrase": [
+        "laid off staff and shut sites",
+        "job cuts and plant closures",
+        "downsizing the workforce"
+      ]
+    }
+  ],
+  "exact": [
+    {
+      "family": "guidance range",
+      "pattern": "full year (\\d{4}) revenue guidance (?:to|of) \\$(\\d+) billion to \\$(\\d+) billion",
+      "query": "{0} revenue guidance ${1} billion to ${2} billion"
+    },
+    {
+      "family": "credit facility size",
+      "pattern": "revolving credit facility of \\$(\\d+) million",
+      "query": "revolving credit facility of ${0} million"
+    },
+    {
+      "family": "buyback size",
+      "pattern": "share repurchase authorization of \\$(\\d+) million",
+      "query": "share repurchase authorization ${0} million"
+    },
+    {
+      "family": "damages awarded",
+      "pattern": "awarded damages of \\$(\\d+) million",
+      "query": "patent verdict damages ${0} million"
+    }
+  ]
+}

@@ -17,6 +17,9 @@ flab llm-eval --gold "$WORK/llm_dataset/gold.jsonl" --systems rules --limit 100 
 flab llm-features --lake "$LAKE" --system rules --out "$LAKE/gold/llm_signals.parquet"
 flab register --lake "$LAKE" --metrics "$ART/phase2/metrics.json" --alias champion
 flab drift-report --lake "$LAKE" --months 18 --out "$ART/drift" > /dev/null
+# retrieval and agent evaluations; the hashing embedder stands in for the sentence encoder so no model is downloaded
+flab retrieval-eval --lake "$LAKE" --model hash-256 --companies-per-need 3 --out "$ART/retrieval" > /dev/null
+flab agent-eval --lake "$LAKE" --truth "$SYN/truth.parquet" --retrieval bm25,hybrid --model hash-256 --per-type 10 --out "$ART/agent" > /dev/null
 flab gate --production models/production.json --extractor-eval "$ART/phase3/eval.json" --system rules || echo "gate: candidate differs from production on this tiny world (expected)"
 
 python - "$WORK" <<'PY'
@@ -41,5 +44,10 @@ doc = c.get(f"/v1/filings/{acc}/paragraphs").json()
 assert any(p["paragraph_id"] == ans["citations"][0]["paragraph_id"] for s in doc["sections"] for p in s["paragraphs"])
 dq = json.loads((w / "artifacts/dq/dq.json").read_text())
 assert not [d for d in dq if d["status"] == "fail"]
+retrieval = json.loads((w / "artifacts/retrieval/metrics.json").read_text())
+assert retrieval["by_style"]["lexical"]["bm25"]["hit@5"]["mean"] > 0.9
+agent = json.loads((w / "artifacts/agent/metrics.json").read_text())["systems"]
+assert agent["offline, bm25, dated questions scoped"]["types"]["reaction"]["mean"] == 1.0
+assert all(s["citation_valid_rate"] == 1.0 and s["errors"] == 0 for s in agent.values())
 print(f"e2e ok: {len(companies)} companies, answer with {len(ans['citations'])} verified citations")
 PY

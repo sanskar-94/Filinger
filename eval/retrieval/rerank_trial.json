@@ -1,0 +1,57 @@
+{
+  "model": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "depth": 30,
+  "cases": 852,
+  "by_style": {
+    "lexical": {
+      "dense": {
+        "hit@1": 0.9875,
+        "hit@5": 0.9875,
+        "recall@10": 0.852,
+        "mrr@10": 0.988,
+        "ndcg@10": 0.8838
+      },
+      "hybrid": {
+        "hit@1": 0.9875,
+        "hit@5": 0.9917,
+        "recall@10": 0.856,
+        "mrr@10": 0.9889,
+        "ndcg@10": 0.8885
+      },
+      "hybrid + reranker": {
+        "hit@1": 0.9917,
+        "hit@5": 0.9917,
+        "recall@10": 0.8581,
+        "mrr@10": 0.9917,
+        "ndcg@10": 0.8917
+      }
+    },
+    "paraphrase": {
+      "dense": {
+        "hit@1": 0.6258,
+        "hit@5": 0.7451,
+        "recall@10": 0.6332,
+        "mrr@10": 0.6756,
+        "ndcg@10": 0.6147
+      },
+      "hybrid": {
+        "hit@1": 0.6242,
+        "hit@5": 0.7451,
+        "recall@10": 0.6322,
+        "mrr@10": 0.6744,
+        "ndcg@10": 0.6129
+      },
+      "hybrid + reranker": {
+        "hit@1": 0.6912,
+        "hit@5": 0.7386,
+        "recall@10": 0.6411,
+        "mrr@10": 0.713,
+        "ndcg@10": 0.6438
+      }
+    }
+  },
+  "rerank_seconds_per_query": {
+    "p50": 0.847,
+    "p95": 2.664
+  }
+}
