@@ -156,6 +156,14 @@ Promotion is GitOps: a pull request edits `models/production.json`, and the gate
 Gated metrics: extraction score (may drop at most 0.01), schema validity, quote grounding, guidance F1,
 p95 latency SLO of 8 s, and for the reaction model AUC, IC, and AUC significantly above 0.5.
 
+## A free public demo (`deploy/space/`)
+
+One container for a Hugging Face Space on free CPU hardware: the image clones the repository, builds the synthetic
+demo data into itself, and `start.sh` runs the API on localhost and the Next.js app on the public port, exiting if
+either stops so the platform restarts it. The start script has run here against the local lake (page, company
+list and a cited answer through the public port). The image has not been built, because the machine this was
+written on has no Docker; the Space builds it.
+
 ## Local stack
 
 ```bash

@@ -21,7 +21,8 @@ markets.
 | LoRA fine tune | Run for real: Qwen2.5 3B in 4 bit, with MLX, on an 8 GB Mac. It learned from the generator's own labels |
 | Frontier teacher | The labelling path is written and 60 filings were labelled once as a reference. The teacher run that would make this a distillation has not happened |
 | Retrieval | BM25, dense and hybrid retrieval run and compared on 1,012 query and company pairs |
-| Analyst agent | The offline extractive agent is run and scored on 240 questions with known answers. The hosted model loop is tested against a scripted client only; `flab agent-eval --agent claude` scores it on the same questions |
+| Analyst agent | The offline extractive agent is run and scored on 240 questions with known answers. The hosted model loops (one for a paid API, one for any OpenAI compatible API such as NVIDIA's free endpoints) are tested against scripted clients only; `flab agent-eval --agent openai` scores a model on the same questions once a key is set |
+| Live demo | The container for a free Hugging Face Space is written and its start script runs here (page, company list and a cited answer through the public port). The image itself has not been built: no Docker on the machine this was written on. Steps: [deploy/space/README.md](deploy/space/README.md) |
 | Serving | The API, registry, drift checks and a load test have run in the container as the cluster would run it. vLLM on a GPU has not; a CPU stand in with the same routes served the adapters |
 | Kubernetes, EKS, Terraform, Databricks, EMR | Written, and validated in CI where a validator exists (kubeconform, terraform validate, promtool). Never applied to a cloud account |
 | A/B experiment | Assignment, logging and the readout run on simulated users |
@@ -195,9 +196,23 @@ flab prices --index data/lake/bronze/index.parquet --source yahoo
 flab facts --index data/lake/bronze/index.parquet --bulk companyfacts.zip
 ```
 
+Keys and the SEC contact line go in a local `.env` (never committed; `.env.example` lists the names), which every
+`flab` command reads.
+
 Then run the Spark jobs on Databricks (`infra/databricks/databricks.yml`: download, transform, features with
-`flab spark-features`, quality gates) or EMR (`infra/emr/run_pipeline.sh`). Set `ANTHROPIC_API_KEY` for
-teacher labelling and the online agent; train the adapter on a 24 GB GPU with `flab llm-train`.
+`flab spark-features`, quality gates) or EMR (`infra/emr/run_pipeline.sh`). Train the adapter on a 24 GB GPU with `flab llm-train`.
+
+## Hosted models, free or paid
+
+The agent and the labelling run against either of two kinds of hosted model:
+
+| Setting in `.env` | What uses it |
+|---|---|
+| `NVIDIA_API_KEY` (free, from build.nvidia.com) | `flab agent-eval --agent openai`, `flab llm-label --system api:meta/llama-3.3-70b-instruct`, `flab llm-eval --systems rules,api:meta/llama-3.3-70b-instruct`, and the app's agent when no paid key is set. Any OpenAI compatible API works: set `FLAB_OPENAI_BASE_URL` and `FLAB_OPENAI_MODEL` |
+| `ANTHROPIC_API_KEY` (paid) | the frontier teacher (`flab llm-label`), `flab agent-eval --agent claude`, and the app's agent |
+
+The free tier allows about 40 requests a minute, so the client spaces its requests, backs off on a rate limit, and
+labelling resumes where it stopped.
 
 ## Honest scope
 
@@ -254,6 +269,7 @@ src/filings_lab/   edgar, text, prices, pipeline (Phase 1) · features, modeling
 tests/             unit and integration tests for every phase
 web/               Next.js 15 and TypeScript analyst app
 infra/             Databricks, EMR, AWS and EKS Terraform, Kubernetes, monitoring
+deploy/space/      the demo container for a free Hugging Face Space
 configs/           LoRA and QLoRA configs, experiment config
 models/            production and candidate model records (GitOps promotion)
 dashboards/        BI star schema exports, Power BI and Tableau kits

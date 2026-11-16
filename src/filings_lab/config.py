@@ -6,6 +6,30 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+def load_dotenv(path: str | Path = ".env") -> list[str]:
+    """Read ``KEY=value`` lines from a local ``.env`` into the environment and return the names it set.
+
+    Keys and contact details belong in a file that is never committed, not in a shell history or a script.
+    A variable that is already set wins, so a deployment's real environment is never overridden by a stray file.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return []
+    added = []
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.removeprefix("export ").partition("=")
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key and value and key not in os.environ:
+            os.environ[key] = value
+            added.append(key)
+    return added
+
+
 def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 

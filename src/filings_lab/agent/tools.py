@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from .store import DataStore, edgar_url
 
 NULLABLE_STR = {"type": ["string", "null"]}
 
-TOOL_DEFS = [
+TOOL_DEFS: list[dict[str, Any]] = [
     {
         "name": "search_filings",
         "description": "Full text search over paragraphs of SEC filings (10-K, 10-Q, 8-K MD&A, risk factors, legal proceedings and 8-K items). "

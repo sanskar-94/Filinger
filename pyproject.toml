@@ -32,7 +32,7 @@ dense = ["fastembed>=0.4"]  # dense and hybrid retrieval: a small ONNX sentence 
 dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5", "mypy>=1.11", "types-requests", "types-PyYAML"]
 
 [project.scripts]
-flab = "filings_lab.cli:main"
+flab = "filings_lab.cli:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]

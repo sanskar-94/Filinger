@@ -35,6 +35,13 @@ the provider's recommended fallback model instead of losing the label. Refusals 
 as errors rather than parsed. Bulk labelling goes through the Message Batches API at half price; fallbacks
 are not accepted there, so failed batch items are retried in realtime afterwards (`flab llm-label`).
 
+A free teacher: `api:<model>` is a system spec for any hosted model behind an OpenAI compatible API (NVIDIA's free
+endpoints by default, for example `api:meta/llama-3.3-70b-instruct`). It runs wherever a spec does: `flab llm-eval
+--systems rules,api:...` scores it on the gold set beside the rules, and `flab llm-label --system api:...` labels
+with it, one request at a time under the free tier's rate limit, appending to the output so an interrupted run
+resumes. An open 70B model is a weaker teacher than the frontier model; its row in the evaluation says how much.
+Not yet run: it needs a key.
+
 ## Data (`filings_lab/llm/dataset.py`)
 
 1. Teacher labels: `flab llm-label --mode batch --limit 3000` writes labels with token usage and cost.

@@ -56,8 +56,9 @@ def _register_agent_eval(p):
     p.add_argument("--lake", default="data/lake")
     p.add_argument("--truth", default="data/synthetic/truth.parquet")
     p.add_argument("--out", default="eval/agent")
-    p.add_argument("--agent", choices=["offline", "claude"], default="offline",
-                   help="offline: the extractive agent; claude: the hosted model through the tool loop (needs an API key)")
+    p.add_argument("--agent", choices=["offline", "claude", "openai"], default="offline",
+                   help="offline: the extractive agent; claude: the hosted model through the tool loop; openai: any OpenAI "
+                        "compatible API, NVIDIA's free endpoints by default (both hosted modes need a key)")
     p.add_argument("--retrieval", default="bm25,hybrid", help="retrieval modes to compare, comma separated")
     p.add_argument("--model", default=None, help="embedding model for dense retrieval")
     p.add_argument("--per-type", type=int, default=40, help="questions per question type")

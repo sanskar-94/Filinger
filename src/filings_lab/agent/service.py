@@ -10,7 +10,9 @@ from typing import Any
 
 from ..experiment.assign import Experiment
 from ..experiment.log import EventLog
+from ..openai_compat import api_key as openai_api_key
 from .agent import AGENT_MODEL, ClaudeAgent, ExtractiveAgent
+from .openai_agent import OpenAIChatAgent
 from .retrieval import BM25Index, build_index
 from .store import DataStore
 from .tools import ToolBox
@@ -26,7 +28,9 @@ class AgentService:
         self.index = self.index_for(self.retrieval)
         self.experiment, self.log, self.scorer, self.client = experiment, log, scorer, client
         has_key = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
-        self.mode = ("claude" if (has_key or client is not None) else "offline") if mode == "auto" else mode
+        # auto: the hosted model when its key is set, else a free OpenAI compatible API when that key is set, else offline
+        auto = "claude" if (has_key or client is not None) else "openai" if openai_api_key() else "offline"
+        self.mode = auto if mode == "auto" else mode
         self._extractors: dict[str, object] = {}
         self.serve_signals = True  # attach each variant's extractor to its tool box
         self.llm_base_url = os.environ.get("FLAB_LLM_BASE_URL", "")
@@ -96,8 +100,11 @@ class AgentService:
     def ask(self, question: str, ticker: str | None = None, user_id: str = "anonymous", ts: float | None = None) -> dict:
         variant, cfg = self.variant_for(user_id)
         tb = self.toolbox_for(variant, cfg)
-        if self.mode == "claude":
-            ans = ClaudeAgent(tb, model=cfg.get("agent_model", AGENT_MODEL), client=self.client).ask(question, ticker)
+        if self.mode in ("claude", "openai"):
+            if self.mode == "claude":
+                ans = ClaudeAgent(tb, model=cfg.get("agent_model", AGENT_MODEL), client=self.client).ask(question, ticker)
+            else:
+                ans = OpenAIChatAgent(tb, model=cfg.get("openai_agent_model"), client=self.client).ask(question, ticker)
             if ans.error:  # API unavailable: answer offline rather than fail the analyst
                 ans = ExtractiveAgent(tb, k=cfg.get("k", 4)).ask(question, ticker)
                 ans.meta["fallback_from_error"] = True

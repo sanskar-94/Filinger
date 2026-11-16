@@ -200,6 +200,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from .config import load_dotenv
+
+    load_dotenv()  # SEC_USER_AGENT and API keys from a local .env, if there is one
     _load_plugins()
     args = build_parser().parse_args(argv)
     args.fn(args)
@@ -219,5 +222,36 @@ def _load_plugins() -> None:
         COMMANDS.update(getattr(m, "COMMANDS", {}))
 
 
+def run() -> None:
+    """Console entry point: ``main`` followed by an exit that skips C++ static destructors.
+
+    Arrow's thread pool can deadlock in its destructor at interpreter shutdown: seen on macOS, where ``flab local``
+    wrote every table and then never returned, which would stall a long script after its work was done. Python's
+    own exit handlers still run, output is flushed, and the exit code is the one the command chose.
+    """
+    import atexit
+    import os
+    import traceback
+
+    code = 0
+    try:
+        main()
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            code = exc.code
+        elif exc.code is not None:
+            print(exc.code, file=sys.stderr)
+            code = 1
+    except BaseException:  # noqa: BLE001 - report it as the interpreter would, then leave the same way
+        traceback.print_exc()
+        code = 1
+    try:
+        atexit._run_exitfuncs()
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(code)
+
+
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    run()

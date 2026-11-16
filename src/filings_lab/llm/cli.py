@@ -17,8 +17,11 @@ def _inputs(lake: str, budget: int):
 
 
 def make_system(spec: str, style: str = "full"):
-    """rules | frontier[:model] | vllm:<base_url>|<model>[|guided] | hf:<model_path>[|<adapter_path>] |
+    """rules | frontier[:model] | api:<model> | vllm:<base_url>|<model>[|guided] | hf:<model_path>[|<adapter_path>] |
     mlx:<model>[|<adapter_path>] | replay:<labels.jsonl>, each optionally followed by @name.
+
+    ``api`` is a hosted model behind an OpenAI compatible API (``filings_lab/openai_compat.py``): NVIDIA's free
+    endpoints by default, for example ``api:meta/llama-3.3-70b-instruct``.
 
     ``replay`` scores labels produced elsewhere (an annotator, a batch API results file): one JSON object per line
     with ``accession`` and ``signals``."""
@@ -38,6 +41,12 @@ def make_system(spec: str, style: str = "full"):
         return LabelExtractor({r["accession"]: r["signals"] for r in rows if r.get("signals")}, name=label or "replay")
     if kind == "frontier":
         return AnthropicExtractor(model=rest) if rest else AnthropicExtractor()
+    if kind == "api":
+        from ..openai_compat import ChatClient, default_model
+
+        client = ChatClient()
+        model = rest or default_model()
+        return OpenAICompatExtractor(client.base_url, model, name=label or f"api:{model}", style=style, client=client)
     if kind == "vllm":
         parts = rest.split("|")
         return OpenAICompatExtractor(parts[0], parts[1], guided=len(parts) > 2 and parts[2] == "guided", style=style,
@@ -76,6 +85,21 @@ def cmd_label(a):
     chosen = [inputs[k] for k in keys[: a.limit]]
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    if a.system:  # any other teacher, one request at a time; a free API is rate limited, so the run resumes
+        ex = make_system(a.system)
+        done = {json.loads(x)["accession"] for x in out.read_text().splitlines() if x.strip()} if out.exists() else set()
+        todo = [i for i in chosen if i.accession not in done]
+        ok = 0
+        with open(out, "a") as fh:
+            for n, inp in enumerate(todo, start=1):
+                r = ex.extract(inp)
+                ok += r.schema_valid
+                fh.write(json.dumps(r.to_dict()) + "\n")
+                fh.flush()
+                if n % 25 == 0:
+                    print(f"{n} of {len(todo)} labelled, {ok} schema valid")
+        print(f"{ok}/{len(todo)} labelled now by {ex.name}, {len(done)} already there -> {out}")
+        return
     if a.mode == "batch":
         lab = AnthropicBatchLabeler(AnthropicExtractor(model=a.model, use_fallbacks=False))
         ids = lab.submit(chosen)
@@ -152,6 +176,8 @@ def _reg_label(p):
     p.add_argument("--lake", default="data/lake")
     p.add_argument("--out", default="data/teacher/labels.jsonl")
     p.add_argument("--model", default=None)
+    p.add_argument("--system", default=None,
+                   help="label with another system spec instead of the frontier model, for example api:meta/llama-3.3-70b-instruct")
     p.add_argument("--mode", choices=["batch", "realtime"], default="batch")
     p.add_argument("--limit", type=int, default=3000)
     p.add_argument("--budget", type=int, default=12_000)

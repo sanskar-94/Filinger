@@ -214,11 +214,12 @@ class OpenAICompatExtractor(Extractor):
     """vLLM (or any OpenAI compatible server). ``guided=True`` uses vLLM's JSON schema constrained decoding."""
 
     def __init__(self, base_url: str, model: str, name: str | None = None, guided: bool = False,
-                 max_tokens: int = 768, timeout: float = 120.0, session=None, style: str = "full"):
+                 max_tokens: int = 768, timeout: float = 120.0, session=None, style: str = "full", client=None):
         import requests
 
         self.base_url, self.model, self.guided, self.style = base_url.rstrip("/"), model, guided, style
         self.max_tokens, self.timeout = max_tokens, timeout
+        self.client = client  # a ChatClient for a hosted API: bearer key, request spacing, backoff on 429
         self.session = session or requests.Session()
         self.name = name or f"vllm:{model}{':guided' if guided else ''}"
 
@@ -229,9 +230,12 @@ class OpenAICompatExtractor(Extractor):
                                        "json_schema": {"name": "filing_signals", "schema": json_schema(), "strict": True}}
         t0 = time.perf_counter()
         try:
-            r = self.session.post(f"{self.base_url}/chat/completions", json=body, timeout=self.timeout)
-            r.raise_for_status()
-            data = r.json()
+            if self.client is not None:
+                data = self.client.complete(**body)
+            else:
+                r = self.session.post(f"{self.base_url}/chat/completions", json=body, timeout=self.timeout)
+                r.raise_for_status()
+                data = r.json()
         except Exception as exc:  # noqa: BLE001
             return _result(self.name, inp, None, time.perf_counter() - t0, error=f"http: {exc}")
         usage = data.get("usage", {})

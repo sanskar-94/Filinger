@@ -3,13 +3,14 @@
 # walk forward model, for the companies in configs/universe_large_cap.txt. Resumable: every stage skips what
 # is already on disk. Raw filings are stored compressed (about 1 GB for the default run).
 #
-#   export SEC_USER_AGENT="Your Name you@example.com"   # the SEC refuses undeclared tools
+#   echo 'SEC_USER_AGENT="Your Name you@example.com"' >> .env   # the SEC refuses undeclared tools
 #   bash scripts/real_run.sh
 #
 # The universe is today's large companies, so it is survivorship biased: a company that failed or was bought
 # between START and END is not in it. Read the results as "does this work on real text", not as a strategy.
 set -euo pipefail
-: "${SEC_USER_AGENT:?set SEC_USER_AGENT to a name and contact email, as the SEC fair access policy asks}"
+if [ -z "${SEC_USER_AGENT:-}" ] && [ -f .env ]; then set -a; . ./.env; set +a; fi  # the contact line can live in .env
+: "${SEC_USER_AGENT:?set SEC_USER_AGENT to a name and contact email (in .env or the shell), as the SEC fair access policy asks}"
 UNIVERSE="${UNIVERSE:-configs/universe_large_cap.txt}"
 START="${START:-2015-01-01}"; END="${END:-2024-12-31}"
 OUT="${OUT:-data/real}"; ART="${ART:-artifacts/real}"; WORKERS="${WORKERS:-4}"

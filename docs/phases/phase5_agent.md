@@ -31,6 +31,16 @@ blocks replay unchanged, all tool results of a turn returned in one message, exp
 `tool_use`, `pause_turn`, `refusal` and `max_tokens`, server side refusal fallback, a turn cap and token cost
 accounting. A scripted fake client tests the loop deterministically (`tests/test_agent.py`).
 
+The same loop on a free API (`agent/openai_agent.py`, `openai_compat.py`): `OpenAIChatAgent` speaks the OpenAI
+chat completions format, so the agent runs on NVIDIA's free hosted endpoints (the default, `NVIDIA_API_KEY`) or on
+any compatible server. The loop is the one above; what differs is the wire format and what an open model needs
+forgiven. Arguments the tool does not declare are dropped, arguments that are not valid JSON are reported back to
+the model as a tool error so it can retry, and reasoning printed inside `<think>` tags is removed from the answer.
+The client spaces requests under the free tier's limit of about 40 a minute and backs off on a 429, honouring
+`Retry-After`. The service picks the paid model when its key is set, this one when only its key is set, and the
+offline agent otherwise. Tested against a scripted client (`tests/test_openai_compat.py`); not yet run against the
+real API.
+
 Offline mode: without an API key the service answers with `ExtractiveAgent`: the same retrieval and tools,
 quoting the most relevant sentence of each hit with its citation and the market reaction to the top filing.
 The service also falls back to it if the API errors. BM25 ranks on whichever query words it knows, so when a
@@ -136,10 +146,11 @@ The offline extractive agent, by retrieval mode, with and without scoping a date
 3. The offline agent cannot say no. It answers "not disclosed" questions correctly only when nothing matches at all
    (15% with BM25) and never with dense or hybrid retrieval, which always return their nearest paragraphs. Reading
    the passages and concluding that they do not answer the question is the hosted model's job.
-4. The hosted model has not been scored: no API key was available where this was built. `flab agent-eval --agent
-   claude` runs the same 240 questions through the tool loop and writes the same report, with the answers saved
-   beside the marks, since a model's free wording can fail the direction and absence patterns that suit an agent
-   which only quotes. A test runs that path against a scripted client.
+4. No hosted model has been scored: no API key was available where this was built. `flab agent-eval --agent
+   openai` (a free NVIDIA key) or `--agent claude` runs the same 240 questions through the tool loop and writes the
+   same report, with the answers saved beside the marks, since a model's free wording can fail the direction and
+   absence patterns that suit an agent which only quotes. Tests run both paths against scripted clients. At 40
+   requests a minute a full run takes a while, so start with `--per-type 10`.
 
 ## API routes (mounted into the Phase 4 service)
 

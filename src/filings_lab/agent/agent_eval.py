@@ -12,7 +12,8 @@ Four question types, built from the generator's ground truth:
   says so instead of presenting unrelated passages as evidence.
 
 The same questions score any agent that returns an ``AgentAnswer``: the offline extractive agent (no model,
-runs anywhere) and the hosted model through the tool loop (``--agent claude``, needs an API key). The checks
+runs anywhere) and a hosted model through the tool loop (``--agent claude``, or ``--agent openai`` for any
+OpenAI compatible API such as NVIDIA's free endpoints; both need a key). The checks
 are mechanical on purpose: citations are compared with known paragraphs and numbers with known returns, so
 no model grades another model.
 """
@@ -25,6 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from ..openai_compat import default_model
 from .retrieval_eval import label_paragraphs
 
 GUIDANCE_NEEDS = {"raised": "guidance_raised", "lowered": "guidance_lowered", "maintained": "guidance_maintained"}
@@ -210,6 +212,7 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
              per_type: int = 40, seed: int = 0, embed_model: str | None = None, client=None, log=print) -> dict:
     from .agent import AGENT_MODEL, ClaudeAgent, ExtractiveAgent
     from .embeddings import get_embedder
+    from .openai_agent import OpenAIChatAgent
     from .retrieval import BM25Index, build_index
     from .store import DataStore
     from .tools import ToolBox
@@ -223,6 +226,9 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
         index = build_index(store.paragraphs, mode, lake=lake, embedder=embedder, bm25=bm25, log=log)
         if agent == "claude":
             frames.append(run_agent(ClaudeAgent(ToolBox(store, index), client=client), questions, f"{AGENT_MODEL}, {mode}", log))
+        elif agent == "openai":
+            hosted = OpenAIChatAgent(ToolBox(store, index), client=client)
+            frames.append(run_agent(hosted, questions, f"{hosted.model}, {mode}", log))
         else:
             for scoped in (False, True):
                 name = f"offline, {mode}" + (", dated questions scoped" if scoped else "")
@@ -233,7 +239,8 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
     rows = pd.concat(frames, ignore_index=True)
     summary = summarise(rows)
     info = {"questions": len(questions), "by_type": {t: sum(q["type"] == t for q in questions) for t in HEADLINE},
-            "agent": "offline extractive" if agent == "offline" else f"hosted model ({AGENT_MODEL})", "retrieval": list(modes),
+            "agent": {"offline": "offline extractive", "claude": f"hosted model ({AGENT_MODEL})"}.get(
+                agent, f"hosted model through an OpenAI compatible API ({default_model()})"), "retrieval": list(modes),
             "per_type": per_type, "seed": seed}
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -241,7 +248,7 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
     (out / "report.md").write_text(report_md(summary, info))
     (out / "questions.jsonl").write_text("".join(json.dumps(q, default=str) + "\n" for q in questions))
     rows.drop(columns=["answer"]).round(4).to_csv(out / "scores.csv", index=False)
-    if agent == "claude":  # a model's wording is worth reading next to its marks; the offline agent only quotes
+    if agent != "offline":  # a model's wording is worth reading next to its marks; the offline agent only quotes
         (out / "answers.jsonl").write_text("".join(
             json.dumps({"system": r.system, "id": int(r.id), "answer": r.answer}) + "\n" for r in rows.itertuples(index=False)))
     return {"info": info, **summary}
