@@ -15,7 +15,7 @@ Tools (strict JSON schemas, `tools.py`):
 | `get_paragraph(paragraph_id)` | full text, neighbouring paragraph ids, EDGAR URL |
 | `list_filings(ticker, form, limit)` | a company's filings with their 3 day abnormal return |
 | `get_price_history(ticker, start, end)` | return, drawdown, volatility, weekly closes |
-| `get_event_return(accession)` | day 0 return and CAR[0,+2] for one filing |
+| `get_event_return(accession)` | day 0 return and the 3 day abnormal return, CAR[0,+2], for one filing (`car_3d`, with the market model estimate beside it) |
 | `extract_signals(accession)` | runs the extraction model this session serves (its A/B variant's LoRA adapter on vLLM, rules offline) and returns signals with quotes resolved to paragraph ids; only quotes the cited paragraph really contains become citable, and a fallback to rules is recorded per request |
 | `get_model_signal(accession)` | stored LLM signals and the reaction model's probability with drivers |
 
@@ -29,17 +29,31 @@ Online agent loop (`agent.py`): a hosted frontier model (`FLAB_AGENT_MODEL` sets
 prompt, strict tools with automatic tool choice, the full assistant content appended every turn so thinking
 blocks replay unchanged, all tool results of a turn returned in one message, explicit handling of
 `tool_use`, `pause_turn`, `refusal` and `max_tokens`, server side refusal fallback, a turn cap and token cost
-accounting. A scripted fake client tests the loop deterministically (`tests/test_agent.py`).
+accounting. On the last turn the request withdraws the tools (`tool_choice` none, the definitions stay so the
+cached prefix still matches) and an instruction to answer from what was found follows the tool results in the same
+message, so a search that never ends still produces an answer. A scripted fake client tests the loop
+deterministically (`tests/test_agent.py`). This loop has not been run against the paid API.
 
 The same loop on a free API (`agent/openai_agent.py`, `openai_compat.py`): `OpenAIChatAgent` speaks the OpenAI
 chat completions format, so the agent runs on NVIDIA's free hosted endpoints (the default, `NVIDIA_API_KEY`) or on
 any compatible server. The loop is the one above; what differs is the wire format and what an open model needs
-forgiven. Arguments the tool does not declare are dropped, arguments that are not valid JSON are reported back to
-the model as a tool error so it can retry, and reasoning printed inside `<think>` tags is removed from the answer.
-The client spaces requests under the free tier's limit of about 40 a minute and backs off on a 429, honouring
-`Retry-After`. The service picks the paid model when its key is set, this one when only its key is set, and the
-offline agent otherwise. Tested against a scripted client (`tests/test_openai_compat.py`); not yet run against the
-real API.
+forgiven, and every item on this list was added after a live model did it:
+
+* the text "None" sent for an empty filter, which turned each optional filter into a search for the word None;
+* arguments the tool does not declare, and arguments that are not valid JSON (reported back as a tool error so
+  the model can retry);
+* reasoning printed inside `<think>` tags;
+* citations in other shapes: `[cite:<id>]`, full width brackets, two ids in one bracket (`tidy_answer` rewrites
+  them into the one form the validator reads);
+* a reply with neither a tool call nor text, which gets one request to answer;
+* a turn budget spent entirely on searching, which is why the last turn withdraws the tools.
+
+The client (`ChatClient`) spaces requests and treats a timeout or a dropped connection like a 5xx. The published
+free limit is about 40 requests a minute, but the largest model answered 429 for minutes at 17 a minute, with no
+`Retry-After`. So the pace adapts: a 429 seen by one thread holds all of them and halves the request rate, and the
+rate climbs back a step for every twenty answers. The service picks the paid model when its key is set, this one
+when only its key is set, and the offline agent otherwise. Scripted clients test all of it
+(`tests/test_openai_compat.py`), and two free models have been scored through it (below).
 
 Offline mode: without an API key the service answers with `ExtractiveAgent`: the same retrieval and tools,
 quoting the most relevant sentence of each hit with its citation and the market reaction to the top filing.
@@ -123,7 +137,7 @@ hybrid row is optimistic; the BM25 and dense rows are not affected.
 | Question type | Example | Right when |
 |---|---|---|
 | guidance, dated (40) | "Did X raise, lower or keep its full year guidance in the earnings release it filed in May 2019?" | the answer cites that filing's guidance paragraph and states the direction |
-| reaction, dated (40) | "How did the stock react to the earnings release X filed in May 2019?" | the answer gives that filing's 3 day abnormal return |
+| reaction, dated (40) | "How did the stock react to the earnings release X filed in May 2019?" | the answer gives that filing's 3 day abnormal return, to one decimal place or better |
 | disclosure made (80) | "Has a securities class action been filed against X?" | the answer cites a paragraph that states it |
 | no such disclosure (80) | the same questions, for companies that never disclosed the event | the answer says so |
 
@@ -146,11 +160,117 @@ The offline extractive agent, by retrieval mode, with and without scoping a date
 3. The offline agent cannot say no. It answers "not disclosed" questions correctly only when nothing matches at all
    (15% with BM25) and never with dense or hybrid retrieval, which always return their nearest paragraphs. Reading
    the passages and concluding that they do not answer the question is the hosted model's job.
-4. No hosted model has been scored: no API key was available where this was built. `flab agent-eval --agent
-   openai` (a free NVIDIA key) or `--agent claude` runs the same 240 questions through the tool loop and writes the
-   same report, with the answers saved beside the marks, since a model's free wording can fail the direction and
-   absence patterns that suit an agent which only quotes. Tests run both paths against scripted clients. At 40
-   requests a minute a full run takes a while, so start with `--per-type 10`.
+4. Two free hosted models were scored on a fresh draw of the same kinds of question (next section).
+   `flab agent-eval --agent openai` (any OpenAI compatible API, NVIDIA's free endpoints by default) or `--agent
+   claude` runs the questions through the tool loop and writes the same report, with each answer saved beside its
+   marks, since a model's free wording can fail the direction and absence patterns that suit an agent which only
+   quotes.
+
+### Hosted models on NVIDIA's free endpoints
+
+Two models went through the free API loop: `nvidia/nemotron-3.5-lightning-30b-a3b` and
+`nvidia/nemotron-3-ultra-550b-a55b`, the default (the names give total and active parameters: 30B with 3B active,
+550B with 55B active). Every run, its answers and its marks are in [eval/agent_hosted](../../eval/agent_hosted/README.md).
+Each answered 60 questions per retrieval mode, 10 dated guidance, 10 dated reaction, 20
+disclosure made and 20 no such disclosure, drawn with `--seed 2`, and the offline agent answered the same 60. A
+hosted model gets the question and the ticker in focus and sets its own filters, so it has no scoped variant: on
+every dated guidance question, both models' first search was already limited to the month the question names.
+
+| Agent | Retrieval | Guidance (10) | Reaction (10) | Disclosure made (20) | No such disclosure (20) | Mean | Turns | Latency p50 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| offline, dated questions scoped | BM25 | 1.000 | 1.000 | 1.000 | 0.100 | 0.775 | 1.0 | 5 ms |
+| offline, dated questions scoped | hybrid | 1.000 | 1.000 | 1.000 | 0.000 | 0.750 | 1.0 | 8 ms |
+| Nemotron 3.5 Lightning | BM25 | 0.900 | 1.000 | 0.850 | 1.000 | 0.938 | 4.7 | 31 s |
+| Nemotron 3.5 Lightning | hybrid | 1.000 | 1.000 | 0.950 | 0.950 | 0.975 | 4.5 | 28 s |
+| Nemotron 3 Ultra | BM25 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 4.6 | 233 s |
+| Nemotron 3 Ultra | hybrid | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 4.5 | 230 s |
+
+Every citation in every row was valid, and the hosted runs cost nothing. With 10 questions a type one answer moves a
+cell by 0.100. A bootstrap interval around a perfect score collapses to a point, so for those cells the exact
+binomial interval is the one to quote: 10 of 10 right is consistent with a true rate as low as 0.69, and 20 of 20
+with one as low as 0.83. The reports print every interval.
+
+How to read it:
+
+1. Saying no is what a model adds. On "no such disclosure" the offline agent is right on 2 or 0 of 20, because
+   retrieval always returns its nearest paragraphs and the agent quotes them. Both models read those paragraphs and
+   say that none of them states the event: 19 or 20 of 20 for the smaller model, 20 of 20 in both modes for the
+   larger.
+2. Everything else the offline agent already gets right, once a person has scoped its dated questions. The models
+   scope those themselves. The smaller one gives up a few disclosures made, mostly to the citation format (below),
+   and the larger gives up nothing.
+3. With a model in the loop retrieval matters less. For the smaller model hybrid minus BM25 is +0.100 on guidance
+   [0.000, +0.300] and +0.100 on disclosures made [-0.100, +0.300], neither distinguishable from zero at this size,
+   and for the larger it is zero on every type. The smaller model's one BM25 guidance miss is the vocabulary gap
+   from the table above: the filing says "outlook", a BM25 search for "guidance" in that month returned nothing,
+   and the model said the filing did not state it. With hybrid retrieval it found the paragraph.
+4. Time is the price. The two runs shared one free key and ran side by side, four and three questions in flight.
+   The smaller model took 44 minutes for its 120 answers and the larger just under three hours, most of it waiting
+   out the rate limit: in the hybrid half, the only one counted, the API refused 36 of the smaller model's 306
+   requests and 103 of the larger's 376 with a 429. The latency column includes those waits.
+
+The misses on this draw, one by one. The smaller model missed 6 of 120:
+
+* BM25, guidance: the vocabulary gap above.
+* BM25, three disclosures made: each answer named the right paragraph, as "paragraph [e4e8e7f0bbddba08]" or
+  "paragraph **5081844f83bf3279**", without `cite:`. The app links only `[cite:<id>]`, so a reader would see no
+  source, and the check counts them wrong.
+* hybrid, a disclosure made: asked whether the company appointed a new chief financial officer, it found the
+  appointments of 2013, 2015 and 2018, read "new" as "recent", searched 2023 onward and answered no, citing none of
+  the three.
+* hybrid, a no such disclosure question: on the last turn, with the tools withdrawn, it wrote out a tool call as
+  text instead of an answer.
+
+The larger model missed none of its 120. A perfect score is a reason to doubt the checker, so every one of those
+answers was read: each gives one direction, or the 3 day abnormal return with the market model estimate labelled
+apart, or a plain yes with the stating paragraph cited, or a plain no. Where a company had warned of going concern
+doubt but never said it needed more capital, the answer said exactly that.
+
+None of these was fixed. The code and the checker were frozen before this draw; the list below is how they got
+there.
+
+#### What the development runs changed
+
+Two earlier runs were the development set: the larger model on `--seed 0`
+([first_run](../../eval/agent_hosted/first_run/report.md)) and the smaller on `--seed 1`
+([second_run](../../eval/agent_hosted/second_run/report.md)). Every change below came from reading their answers.
+The table above is a third draw that shares 5 of its 60 questions with the first two, and the earlier reports are
+kept as they were produced.
+
+1. The checker was wrong twice. Models write a minus as an en dash or a non breaking hyphen (U+2011), which the
+   reaction check did not read as a sign, and markdown bold split "does **not** state", so the absence pattern
+   missed it. With both fixed and no answer changed, the first run's BM25 reaction score went from 0.300 to 0.700
+   and its no such disclosure score from 0.900 to 1.000. In the second run three returns rounded to one decimal
+   place were marked wrong; a return now counts at the precision it is written to (within 0.05 points at one
+   decimal, within 0.011 at two or more, and never as a whole number).
+2. Filters nobody asked for. The larger model put a `date_from` in 2020 on its searches unasked, which hid every
+   older filing, and missed 4 disclosures that way. The tool description now says null is the right value for a
+   filter the question does not call for, and the prompt says a question such as "has the company ever disclosed X"
+   covers the whole filing history. On the final draw no first search of an undated question carried a date (0 of
+   160 across both models). Later searches still added dates at times, mostly to check recent filings after finding
+   nothing (5 of the smaller model's 80 undated questions, 20 of the larger's), and that cost one answer: the chief
+   financial officer question above.
+3. The wrong filing. Asked how the stock reacted to an earnings release, the larger model twice reported the
+   reaction to the 10-Q for the same quarter. The prompt now says an earnings release is the 8-K with Item 2.02, and
+   the periodic report a different filing with its own reaction.
+4. An ambiguous field. `get_event_return` returned `car_0_2` and `car_market_model`, and one answer gave the market
+   model estimate (+8.03%) as the 3 day abnormal return (+10.23%). The fields are now `car_3d` and
+   `car_3d_market_model`, with a note that says which one is the reaction.
+5. An outage. The first run lost 24 of its 60 hybrid answers to API errors within a few minutes and kept no error
+   text. Errors now keep their text, a question that ended in an API error is asked again after a pause
+   (`--retries`), each answer is appended to `progress.jsonl` as it arrives so a stopped run resumes, and the client
+   paces itself as described above. Both final runs ended with no errors left.
+6. Reasoning spends the token budget. These models reason before they answer and the reasoning counts against
+   `max_tokens`; the extraction run in phase 3 lost 76 of 100 answers to it. The agent's cap went from 2,000 to 4,096.
+7. Citations and silence. The second run wrote `【cite:id】` and `[cite:a; cite:b]`, and once replied with nothing at
+   all. `tidy_answer` and the one request to answer handle those. A bare id without `cite:` is still not read as a
+   citation, for the reason above.
+
+Limits, stated plainly. Sixty questions a mode is small. The questions come from the synthetic world, where filings
+are short and each fact sits in a known sentence; real filings are longer and vaguer. The fixes were made by reading
+the answers of the first two draws, so those runs' numbers are not evidence, only the seed 2 table is. And the checks
+are patterns: an answer worded in a way they do not expect is marked wrong, so the reports keep every answer beside
+its marks.
 
 ## API routes (mounted into the Phase 4 service)
 

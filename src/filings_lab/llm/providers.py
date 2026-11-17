@@ -210,6 +210,9 @@ class AnthropicBatchLabeler:
 
 
 # --------------------------------------------------------------------------------------- self hosted
+_THINK = re.compile(r"<think>.*?</think>", re.S | re.I)
+
+
 class OpenAICompatExtractor(Extractor):
     """vLLM (or any OpenAI compatible server). ``guided=True`` uses vLLM's JSON schema constrained decoding."""
 
@@ -239,8 +242,17 @@ class OpenAICompatExtractor(Extractor):
         except Exception as exc:  # noqa: BLE001
             return _result(self.name, inp, None, time.perf_counter() - t0, error=f"http: {exc}")
         usage = data.get("usage", {})
-        return _result(self.name, inp, data["choices"][0]["message"]["content"], time.perf_counter() - t0,
-                       input_tokens=usage.get("prompt_tokens", 0), output_tokens=usage.get("completion_tokens", 0))
+        choice = data["choices"][0]
+        raw = choice["message"].get("content")
+        if raw:
+            raw = _THINK.sub("", raw)  # reasoning some open models print before the JSON
+        res = _result(self.name, inp, raw, time.perf_counter() - t0,
+                      input_tokens=usage.get("prompt_tokens", 0), output_tokens=usage.get("completion_tokens", 0))
+        if choice.get("finish_reason") == "length" and not res.schema_valid:
+            # a model that reasons first spends the same budget on its reasoning: on the first real run 76 of 100
+            # filings ended here with a cap of 768, 62 of them before any JSON was written
+            res.error = f"cut off at max_tokens ({self.max_tokens})"
+        return res
 
 
 class HFExtractor(Extractor):

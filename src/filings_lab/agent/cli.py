@@ -47,7 +47,9 @@ def _agent_eval(a):
     from .agent_eval import evaluate
 
     summary = evaluate(a.lake, a.truth, a.out, modes=[m.strip() for m in a.retrieval.split(",") if m.strip()],
-                       agent=a.agent, per_type=a.per_type, seed=a.seed, embed_model=a.model, workers=a.workers)
+                       agent=a.agent, per_type=a.per_type, seed=a.seed, embed_model=a.model, workers=a.workers,
+                       retries=a.retries, resume=not a.fresh,
+                       log=lambda m: print(m, flush=True))  # a hosted run takes minutes; show progress as it happens
     print(open(f"{a.out}/report.md").read())
     print(json.dumps(summary["info"]))
 
@@ -64,6 +66,10 @@ def _register_agent_eval(p):
     p.add_argument("--per-type", type=int, default=40, help="questions per question type")
     p.add_argument("--workers", type=int, default=1,
                    help="questions asked at once with --agent openai; the client still keeps to the API's request rate")
+    p.add_argument("--retries", type=int, default=2,
+                   help="times a question that ended in an API error is asked again, after a pause (hosted agents only)")
+    p.add_argument("--fresh", action="store_true",
+                   help="discard the answers an interrupted run left under --out instead of resuming from them")
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(fn=_agent_eval)
 

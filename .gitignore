@@ -16,3 +16,4 @@ web/.next/
 web/*.tsbuildinfo
 .coverage
 .mypy_cache/
+eval/**/progress.jsonl

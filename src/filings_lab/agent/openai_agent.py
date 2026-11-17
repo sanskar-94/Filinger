@@ -5,7 +5,7 @@ recorded, a citation of an id it was never shown gets one repair turn, and whate
 returned flagged. What differs is the wire format (``tool_calls`` on the assistant message, one ``tool``
 message per result) and what an open model needs forgiven: arguments left out or invented, arguments that are
 not valid JSON, the text "None" for an empty argument, reasoning printed inside ``<think>`` tags, and
-citations written with brackets around the id. On the last turn the tools are withdrawn and the model is told
+citations written with brackets around the id or several to a bracket, and a reply with nothing in it. On the last turn the tools are withdrawn and the model is told
 to answer from what it has, so a search that never ends still produces an answer.
 """
 from __future__ import annotations
@@ -15,21 +15,25 @@ import re
 import time
 
 from ..openai_compat import ChatClient, ChatError, default_model
-from .agent import SYSTEM_PROMPT, AgentAnswer, build_citations
+from .agent import OUT_OF_TURNS, SYSTEM_PROMPT, AgentAnswer, build_citations
 from .tools import TOOL_DEFS, ToolBox
 
 _THINK = re.compile(r"<think>.*?</think>", re.S | re.I)
-# a citation with decoration around the id: [cite:<id>], [cite: id], [cite:"id"]
-_LOOSE_CITE = re.compile(r"\[cite:\s*[<\"'`]?\s*([0-9a-f]{16})\s*[>\"'`]?\s*\]", re.I)
+# a citation as open models have written it: [cite:<id>], [cite: "id"], 【cite:id】, [cite:id; cite:id]
+_CITE_GROUP = re.compile(r"[\[\u3010\u3014]\s*cite\s*:([^\]\u3011\u3015]*)[\]\u3011\u3015]", re.I)
+_PARAGRAPH_ID = re.compile(r"(?<![0-9a-f])[0-9a-f]{16}(?![0-9a-f])", re.I)
+EMPTY_REPLY = "Your last reply was empty. Answer the question now from what the tools returned, with citations."
 CITATION_FORMAT = ("\n\nWrite each citation exactly like [cite:3fa2b1c4d5e6f708]: square brackets, the word cite, a colon and the "
                    "16 character paragraph id, with nothing around the id.")
-OUT_OF_TURNS = ("You have used your search budget. Answer now from what the tools returned. If the filings you searched do "
-                "not state what was asked, say plainly that they do not disclose it, and do not search again.")
 
 
 def tidy_answer(text: str) -> str:
     """The model's final text without printed reasoning and with citations in the one form the validator reads."""
-    return _LOOSE_CITE.sub(lambda m: f"[cite:{m.group(1).lower()}]", _THINK.sub("", text or "")).strip()
+    def one_form(m: re.Match) -> str:
+        ids = _PARAGRAPH_ID.findall(m.group(1))
+        return "".join(f"[cite:{i.lower()}]" for i in ids) if ids else m.group(0)
+
+    return _CITE_GROUP.sub(one_form, _THINK.sub("", text or "")).strip()
 
 
 def openai_tools() -> list[dict]:
@@ -69,7 +73,7 @@ def clean_arguments(name: str, raw) -> dict:
 
 class OpenAIChatAgent:
     def __init__(self, toolbox: ToolBox, model: str | None = None, client: ChatClient | None = None, max_turns: int = 8,
-                 max_tokens: int = 2000):
+                 max_tokens: int = 4096):
         self.tb, self.model, self.max_turns, self.max_tokens = toolbox, model or default_model(), max_turns, max_tokens
         self.client = client or ChatClient()
         self.tools = openai_tools()
@@ -81,7 +85,7 @@ class OpenAIChatAgent:
         messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT + CITATION_FORMAT}, {"role": "user", "content": content}]
         calls: list[dict] = []
         tokens_in = tokens_out = turns = 0
-        repaired, final_text, stop = False, "", None
+        repaired, nudged, final_text, stop = False, False, "", None
         mode = f"openai:{self.model}"
         try:
             while turns < self.max_turns:
@@ -113,6 +117,11 @@ class OpenAIChatAgent:
                         messages.append({"role": "tool", "tool_call_id": call.get("id") or f"call_{turns}_{n}", "content": out})
                     continue
                 final_text = tidy_answer(msg.get("content") or "")
+                if not final_text and not nudged and not last:
+                    # seen live: no tool call and no text, from a model that spent the turn reasoning
+                    nudged = True
+                    messages.append({"role": "user", "content": EMPTY_REPLY})
+                    continue
                 _, invalid = build_citations(final_text, self.tb)
                 if invalid and not repaired and turns < self.max_turns:
                     repaired = True

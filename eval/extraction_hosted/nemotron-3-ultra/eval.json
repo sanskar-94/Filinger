@@ -1,0 +1,52 @@
+{
+  "summary": {
+    "rules": {
+      "n": 100,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.5130572332470521,
+      "management_tone_acc": 0.52,
+      "liquidity_concern_f1": 1.0,
+      "liquidity_concern_acc": 1.0,
+      "litigation_risk_f1": 1.0,
+      "litigation_risk_acc": 1.0,
+      "extraction_score": 0.878264308311763,
+      "quote_grounding_rate": 1.0,
+      "latency_p50_s": 0.00020545849110931158,
+      "latency_p95_s": 0.000539011086220853,
+      "cost_per_1k_usd": 0.0
+    },
+    "api:nvidia/nemotron-3-ultra-550b-a55b": {
+      "n": 100,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.5978150243763567,
+      "management_tone_acc": 0.59,
+      "liquidity_concern_f1": 1.0,
+      "liquidity_concern_acc": 1.0,
+      "litigation_risk_f1": 1.0,
+      "litigation_risk_acc": 1.0,
+      "extraction_score": 0.8994537560940892,
+      "quote_grounding_rate": 0.9421487603305785,
+      "latency_p50_s": 13.738588937500026,
+      "latency_p95_s": 27.18328661213454,
+      "cost_per_1k_usd": 0.0
+    }
+  },
+  "comparisons": {
+    "api:nvidia/nemotron-3-ultra-550b-a55b vs rules": {
+      "diff": 0.02118944778232612,
+      "ci_low": -0.004956466602911857,
+      "ci_high": 0.047591447286297994,
+      "p_le_0": 0.048
+    }
+  },
+  "gold": {
+    "n": 100,
+    "sha256": "16335534eb6ce8a284e518e292a45c34b47c428d30a2887f3fea0b855b3b8ae9"
+  }
+}

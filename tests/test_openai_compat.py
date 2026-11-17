@@ -60,6 +60,46 @@ def test_client_sends_the_key_and_backs_off_on_a_rate_limit(monkeypatch):
         always_limited.complete(model="m")
 
 
+def test_a_rate_limit_slows_every_thread_and_the_pace_recovers():
+    ok = {"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}]}
+    slept = []
+    client = ChatClient(key="x", rpm=6000, session=Session([_resp(429), _resp(200, ok)] + [_resp(200, ok)] * 41), sleep=slept.append)
+    assert client.rpm == pytest.approx(6000)
+    client.complete(model="m", messages=[])
+    assert client.limited == 1 and client.rpm == pytest.approx(3000) and slept == [2.0]
+    # another thread arriving now waits out what is left of those two seconds before it sends anything
+    client.complete(model="m", messages=[])
+    assert len(slept) == 2 and 1.0 < slept[1] <= 2.0
+    client._held_until = 0.0
+    for _ in range(40):
+        client.complete(model="m", messages=[])
+    assert client.rpm == pytest.approx(3000 * 1.25 * 1.25) and client.limited == 1  # 42 answers since the limit: two steps back up
+    floor = ChatClient(key="x", rpm=6, session=Session([_resp(429)] * 3), sleep=slept.append, max_retries=3)
+    with pytest.raises(ChatError, match="429"):
+        floor.complete(model="m")
+    assert floor.rpm == pytest.approx(4.0)  # halved once to 3, held at the floor of 4
+
+
+def test_client_retries_a_timeout_like_a_server_error():
+    import requests
+
+    class Dropping(Session):
+        def post(self, url, json, headers, timeout):
+            item = self.responses.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+    slept = []
+    ok = {"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}]}
+    session = Dropping([requests.Timeout("read timed out"), requests.ConnectionError("reset"), _resp(200, ok)])
+    client = ChatClient(key="x", rpm=0, session=session, sleep=slept.append)
+    assert client.complete(model="m", messages=[]) == ok and slept == [2.0, 4.0] and client.requests == 3
+    gone = ChatClient(key="x", rpm=0, session=Dropping([requests.Timeout("t")] * 2), sleep=slept.append, max_retries=2)
+    with pytest.raises(ChatError, match="no answer from .*Timeout"):
+        gone.complete(model="m")
+
+
 @pytest.fixture(scope="module")
 def store(small_lake):
     return DataStore(str(small_lake))
@@ -171,6 +211,23 @@ def test_labelling_through_the_api_spec_resumes(small_lake, tmp_path, monkeypatc
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
     ex = llm_cli.make_system("api:nvidia/nemotron-3-ultra-550b-a55b")
     assert isinstance(ex, OpenAICompatExtractor) and ex.name == "api:nvidia/nemotron-3-ultra-550b-a55b" and ex.client.key == "nvapi-test"
+    assert ex.max_tokens == 4096  # a hosted model may reason before it answers, and that spends the same budget
+
+    class Reasoner:
+        def __init__(self, message, finish):
+            self.message, self.finish = message, finish
+
+        def complete(self, **body):
+            return {"choices": [{"message": self.message, "finish_reason": self.finish}], "usage": {"completion_tokens": body["max_tokens"]}}
+
+    from filings_lab.llm.prompts import ExtractionInput
+
+    inp = ExtractionInput("0001-24-000001", "8-K", "Acme Inc", [{"paragraph_id": "a" * 16, "section": "mdna", "text": "Revenue increased 5%."}])
+    ex.client = Reasoner({"content": None}, "length")
+    assert ex.extract(inp).error == "cut off at max_tokens (4096)"
+    ex.client = Reasoner({"content": '{"guidance_direction": "none", "key_quotes": [{"paragraph"'}, "length")
+    cut = ex.extract(inp)
+    assert cut.error == "cut off at max_tokens (4096)" and not cut.json_valid
 
     seen = []
 
@@ -232,6 +289,24 @@ def test_agent_concludes_when_the_turn_budget_runs_out(store):
     assert tidy_answer("<think>plan</think>Lowered [cite:<E9E5CB809B1CF6D6>] and [cite: e9e5cb809b1cf6d6 ].") == \
         "Lowered [cite:e9e5cb809b1cf6d6] and [cite:e9e5cb809b1cf6d6]."
     assert "[cite:3fa2b1c4d5e6f708]" in chat.bodies[0]["messages"][0]["content"]  # the format is shown by example
+    # seen on the second run: full width brackets, and two ids sharing one bracket
+    assert tidy_answer("Stepped down \u3010cite:2a6a3f3c53289d78\u3011, facilities [cite:8691be3073be0cb1; cite:b169d4a12c13acd9].") == \
+        "Stepped down [cite:2a6a3f3c53289d78], facilities [cite:8691be3073be0cb1][cite:b169d4a12c13acd9]."
+    assert tidy_answer("See [cite:0001000851-19-000079].") == "See [cite:0001000851-19-000079]."  # not a paragraph id: left for the validator
+
+
+def test_agent_asks_once_more_after_an_empty_reply(store):
+    ticker = store.index["ticker"].iloc[0]
+    search = {"content": None, "tool_calls": [_call("search_filings", {"query": "guidance", "ticker": ticker})]}
+    chat = ScriptedChat([search, {"content": ""}, {"content": "The filings do not disclose it."}])
+    ans = OpenAIChatAgent(ToolBox(store, BM25Index(store.paragraphs)), model="m", client=chat).ask("Did it change guidance?", ticker)
+    assert ans.answer == "The filings do not disclose it." and ans.turns == 3
+    assert chat.bodies[-1]["messages"][-1] == {"role": "user", "content": "Your last reply was empty. Answer the question now "
+                                               "from what the tools returned, with citations."}
+    assert chat.bodies[0]["max_tokens"] == 4096
+    twice = ScriptedChat([search, {"content": ""}, {"content": ""}])
+    silent = OpenAIChatAgent(ToolBox(store, BM25Index(store.paragraphs)), model="m", client=twice).ask("Did it?", ticker)
+    assert silent.answer == "" and silent.turns == 3  # asked once, not in a loop
 
 
 def test_agent_eval_with_workers_gives_each_thread_its_own_tool_box(small_lake, small_world, tmp_path, monkeypatch):

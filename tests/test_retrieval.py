@@ -187,6 +187,84 @@ def test_agent_questions_and_scoring(store, small_world):
     assert agent_eval.score_answer(no, {"answer": "The filings do not disclose any such matter.", "citations": []})["abstained"] == 1.0
     notice = "No indexed filing uses the term 'breached'; these passages only match the other words of the question."
     assert agent_eval.score_answer(no, {"answer": notice, "citations": cite})["abstained"] == 0.0  # not a statement of absence
+    # what a hosted model writes: a typographic minus before the number, and emphasis in the middle of the denial
+    for sign in ("\u2013", "\u2011", "\u2212", "-"):
+        typed = agent_eval.score_answer({**r, "expected": -0.064}, {"answer": f"3 day abnormal return: {sign}6.40 %", "citations": []})
+        assert typed["car_correct"] == 1.0
+    assert agent_eval.score_answer({**r, "expected": 0.064}, {"answer": "Return: \u20136.40%", "citations": []})["car_correct"] == 0.0
+    # a return rounded to one decimal is the right return; rounded to a whole number it is not an answer
+    assert agent_eval.states_percent("3 day abnormal return of about +5.6 %", 5.63) and agent_eval.states_percent("\u20112.7%", -2.68)
+    assert not agent_eval.states_percent("roughly 6%", 5.63) and not agent_eval.states_percent("+5.7%", 5.63)
+    assert not agent_eval.states_percent("+5.60%", 5.63)  # two decimals stated, and they are wrong
+    bold = "Orion Health does **not** state that it needs to raise more capital."
+    assert agent_eval.score_answer(no, {"answer": bold, "citations": cite})["abstained"] == 1.0
+
+
+def test_agent_eval_asks_again_after_an_api_error(store, small_world):
+    from filings_lab.agent.agent import AgentAnswer
+
+    qs = agent_eval.build_questions(store, small_world["truth"], per_type=2, seed=1)
+    down = {qs[0]["id"]: 1, qs[1]["id"]: 5}  # the first recovers on the second try, the second never does
+
+    class Flaky:
+        def __init__(self):
+            self.asked = []
+
+        def ask(self, question, ticker=None):
+            q = next(x for x in qs if x["question"] == question)
+            self.asked.append(q["id"])
+            if down.get(q["id"], 0) > 0:
+                down[q["id"]] -= 1
+                return AgentAnswer("", [], [], [], "test", 1, 0.0, error="api: 503")
+            return AgentAnswer("The filings do not disclose it.", [], [], [{"tool": "search_filings", "input": {"query": "x"}}],
+                               "test", 2, 0.0)
+
+    agent, slept, said = Flaky(), [], []
+    rows = agent_eval.run_agent(agent, qs, "flaky", log=said.append, retries=2, pause=30.0, sleep=slept.append)
+    assert rows["id"].tolist() == [q["id"] for q in qs] and slept == [30.0, 30.0]
+    by_id = rows.set_index("id")
+    assert by_id.loc[qs[0]["id"], "attempts"] == 2 and not by_id.loc[qs[0]["id"], "error"]
+    assert by_id.loc[qs[1]["id"], "attempts"] == 3 and by_id.loc[qs[1]["id"], "error"] and by_id.loc[qs[1]["id"], "error_text"] == "api: 503"
+    assert agent.asked.count(qs[2]["id"]) == 1 and by_id.loc[qs[2]["id"], "calls"] == [{"tool": "search_filings", "input": {"query": "x"}}]
+    assert any("2 questions ended in an API error" in m for m in said)
+    summary = agent_eval.summarise(rows)["systems"]["flaky"]
+    assert summary["asked_again"] == 2 and summary["errors"] == 1
+
+
+def test_agent_eval_resumes_an_interrupted_hosted_run(small_lake, small_world, tmp_path, monkeypatch):
+    from filings_lab.agent import openai_agent
+    from filings_lab.agent.agent import AgentAnswer
+
+    truth = str(small_world["dir"] / "truth.parquet")
+    asked = []
+
+    class Chat:  # the agent never reaches it: ask is replaced below
+        requests = limited = 0
+
+    def answer(self, question, ticker=None):
+        asked.append(question)
+        if stop["after"] is not None and len(asked) > stop["after"]:
+            raise KeyboardInterrupt
+        return AgentAnswer("The filings do not disclose it.", [], [], [], "test", 1, 0.0)
+
+    stop: dict = {"after": 5}
+    monkeypatch.setattr(openai_agent.OpenAIChatAgent, "ask", answer)
+    out = tmp_path / "hosted"
+    run = dict(modes=["bm25"], agent="openai", per_type=3, client=Chat())
+    with pytest.raises(KeyboardInterrupt):
+        agent_eval.evaluate(str(small_lake), truth, out, log=None, **run)
+    saved = (out / "progress.jsonl").read_text().splitlines()
+    assert len(saved) == 5 and not (out / "report.md").exists()
+    stop["after"], said = None, []
+    summary = agent_eval.evaluate(str(small_lake), truth, out, log=said.append, **run)
+    total = summary["info"]["questions"]
+    assert len(asked) == 6 + (total - 5)  # the five saved answers were not asked again
+    assert any("kept 5 answers from an interrupted run" in m for m in said)
+    assert not (out / "progress.jsonl").exists() and len((out / "answers.jsonl").read_text().splitlines()) == total
+    asked.clear()
+    (out / "progress.jsonl").write_text(saved[0] + "\n")
+    agent_eval.evaluate(str(small_lake), truth, out, log=None, resume=False, **run)
+    assert len(asked) == total  # --fresh discards what was saved
 
 
 def test_agent_eval_runs_offline_and_scoping_helps(small_lake, small_world, tmp_path):

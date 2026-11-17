@@ -27,6 +27,7 @@ ids from Phase 1.
 | base | vLLM or transformers, Qwen2.5 3B Instruct or Llama 3.2 3B Instruct | prompt with schema, no fine tuning |
 | fine tuned | same base plus the LoRA adapter (or merged weights) | the student |
 | frontier | a hosted frontier model (`FLAB_FRONTIER_MODEL` sets which) | teacher and upper reference |
+| hosted, free | `api:<model>` on any OpenAI compatible API | a teacher that costs nothing; scored on 100 gold filings below |
 
 Frontier calls use structured outputs (`output_config.format` with the strict JSON schema), an explicit
 `effort` (default medium), a cacheable system prompt, and the server side refusal fallback
@@ -39,8 +40,27 @@ A free teacher: `api:<model>` is a system spec for any hosted model behind an Op
 endpoints by default, for example `api:nvidia/nemotron-3-ultra-550b-a55b`). It runs wherever a spec does: `flab llm-eval
 --systems rules,api:...` scores it on the gold set beside the rules, and `flab llm-label --system api:...` labels
 with it, one request at a time under the free tier's rate limit, appending to the output so an interrupted run
-resumes. An open 70B model is a weaker teacher than the frontier model; its row in the evaluation says how much.
-Not yet run: it needs a key.
+resumes.
+
+Run on 100 gold filings with NVIDIA's free endpoint, no fine tuning
+([report](../../eval/extraction_hosted/nemotron-3-ultra/report.md)):
+
+| System, 100 gold filings | Schema valid | Extraction score | Guidance F1 | Tone F1 | Liquidity F1 | Litigation F1 | Quotes grounded | Latency p50 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| rules | 100% | 0.878 | 1.00 | 0.51 | 1.00 | 1.00 | 100% | under 1 ms |
+| `api:nvidia/nemotron-3-ultra-550b-a55b` | 100% | 0.900 | 1.00 | 0.60 | 1.00 | 1.00 | 94% | 13.7 s |
+
+Paired bootstrap, hosted model minus rules: plus 0.021, 95% CI [-0.005, 0.048]. So a free hosted model ties the
+rules on this data and is ahead only on tone, the field where rules are weakest, which is the same place the
+frontier reference gains below. It is a usable free teacher: every answer parsed and matched the schema, at 14
+seconds a filing.
+
+The first attempt scored 0.303 with 24% valid output, and the fault was the harness. This model reasons before it
+answers, and its reasoning is billed against the same `max_tokens`. With the cap of 768 that suits the fine tuned
+extractor, 76 of 100 answers were cut off, 62 of them before any JSON was written
+([first run](../../eval/extraction_hosted/first_run/report.md)). Hosted models now get 4,096 tokens
+(`FLAB_OPENAI_MAX_TOKENS`); the answers in the rerun used 322 to 2,054, median 987. An answer that ends at the cap
+is recorded as "cut off at max_tokens" instead of "no output", so the cause is visible in the predictions file.
 
 ## Data (`filings_lab/llm/dataset.py`)
 

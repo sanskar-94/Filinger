@@ -14,7 +14,8 @@
       "hybrid"
     ],
     "per_type": 40,
-    "seed": 0
+    "seed": 0,
+    "retries": 0
   },
   "systems": {
     "offline, bm25": {
@@ -54,8 +55,11 @@
       "macro_score": 0.65625,
       "citation_valid_rate": 1.0,
       "errors": 0,
-      "latency_p50_s": 0.006126041989773512,
-      "latency_p95_s": 0.023854018747806505,
+      "asked_again": 0,
+      "mean_turns": 1.0,
+      "empty_answers": 0,
+      "latency_p50_s": 0.004329417017288506,
+      "latency_p95_s": 0.004639614623738453,
       "cost_usd": 0.0
     },
     "offline, bm25, dated questions scoped": {
@@ -95,8 +99,11 @@
       "macro_score": 0.7875,
       "citation_valid_rate": 1.0,
       "errors": 0,
-      "latency_p50_s": 0.006196500005898997,
-      "latency_p95_s": 0.0167803332878975,
+      "asked_again": 0,
+      "mean_turns": 1.0,
+      "empty_answers": 0,
+      "latency_p50_s": 0.004227416997309774,
+      "latency_p95_s": 0.004453418726916425,
       "cost_usd": 0.0
     },
     "offline, dense": {
@@ -136,8 +143,11 @@
       "macro_score": 0.48750000000000004,
       "citation_valid_rate": 1.0,
       "errors": 0,
-      "latency_p50_s": 0.008072687487583607,
-      "latency_p95_s": 0.03693840833147978,
+      "asked_again": 0,
+      "mean_turns": 1.0,
+      "empty_answers": 0,
+      "latency_p50_s": 0.004094604490092024,
+      "latency_p95_s": 0.00959065412171185,
       "cost_usd": 0.0
     },
     "offline, dense, dated questions scoped": {
@@ -177,8 +187,11 @@
       "macro_score": 0.61875,
       "citation_valid_rate": 1.0,
       "errors": 0,
-      "latency_p50_s": 0.005495228979270905,
-      "latency_p95_s": 0.021133168085361826,
+      "asked_again": 0,
+      "mean_turns": 1.0,
+      "empty_answers": 0,
+      "latency_p50_s": 0.004039457970065996,
+      "latency_p95_s": 0.004727260430809109,
       "cost_usd": 0.0
     },
     "offline, hybrid": {
@@ -218,8 +231,11 @@
       "macro_score": 0.49375,
       "citation_valid_rate": 1.0,
       "errors": 0,
-      "latency_p50_s": 0.008261770999524742,
-      "latency_p95_s": 0.02709121431398671,
+      "asked_again": 0,
+      "mean_turns": 1.0,
+      "empty_answers": 0,
+      "latency_p50_s": 0.007595478993607685,
+      "latency_p95_s": 0.013276537536876276,
       "cost_usd": 0.0
     },
     "offline, hybrid, dated questions scoped": {
@@ -259,8 +275,11 @@
       "macro_score": 0.73125,
       "citation_valid_rate": 1.0,
       "errors": 0,
-      "latency_p50_s": 0.010127708490472287,
-      "latency_p95_s": 0.02405448125209658,
+      "asked_again": 0,
+      "mean_turns": 1.0,
+      "empty_answers": 0,
+      "latency_p50_s": 0.007483291992684826,
+      "latency_p95_s": 0.007896041721687652,
       "cost_usd": 0.0
     },
     "offline, hybrid, dated questions scoped, company name kept": {
@@ -300,8 +319,11 @@
       "macro_score": 0.65,
       "citation_valid_rate": 1.0,
       "errors": 0,
-      "latency_p50_s": 0.02282552098040469,
-      "latency_p95_s": 0.07251014825014854,
+      "asked_again": 0,
+      "mean_turns": 1.0,
+      "empty_answers": 0,
+      "latency_p50_s": 0.012537145987153053,
+      "latency_p95_s": 0.013995879216236061,
       "cost_usd": 0.0
     }
   },

@@ -1,0 +1,135 @@
+{
+  "info": {
+    "questions": 60,
+    "by_type": {
+      "guidance": 10,
+      "reaction": 10,
+      "disclosure_yes": 20,
+      "disclosure_no": 20
+    },
+    "agent": "hosted model through an OpenAI compatible API (nvidia/nemotron-3-ultra-550b-a55b)",
+    "retrieval": [
+      "bm25",
+      "hybrid"
+    ],
+    "per_type": 10,
+    "seed": 2,
+    "retries": 2,
+    "api_requests": 376,
+    "rate_limited": 103
+  },
+  "systems": {
+    "nvidia/nemotron-3-ultra-550b-a55b, bm25": {
+      "types": {
+        "guidance": {
+          "n": 10,
+          "metric": "answer_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "reaction": {
+          "n": 10,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 20,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 20,
+          "metric": "abstained",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        }
+      },
+      "guidance_support_cited": 1.0,
+      "guidance_first_citation_correct": 1.0,
+      "disclosure_citation_precision": 1.0,
+      "macro_score": 1.0,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "asked_again": 0,
+      "mean_turns": 4.566666666666666,
+      "empty_answers": 0,
+      "latency_p50_s": 233.39171789598186,
+      "latency_p95_s": 525.9561977565257,
+      "cost_usd": 0.0
+    },
+    "nvidia/nemotron-3-ultra-550b-a55b, hybrid": {
+      "types": {
+        "guidance": {
+          "n": 10,
+          "metric": "answer_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "reaction": {
+          "n": 10,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 20,
+          "metric": "support_cited",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 20,
+          "metric": "abstained",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        }
+      },
+      "guidance_support_cited": 1.0,
+      "guidance_first_citation_correct": 1.0,
+      "disclosure_citation_precision": 0.99,
+      "macro_score": 1.0,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "asked_again": 0,
+      "mean_turns": 4.533333333333333,
+      "empty_answers": 0,
+      "latency_p50_s": 230.1100362504949,
+      "latency_p95_s": 587.3918025732388,
+      "cost_usd": 0.0
+    }
+  },
+  "paired": {
+    "nvidia/nemotron-3-ultra-550b-a55b, hybrid minus nvidia/nemotron-3-ultra-550b-a55b, bm25": {
+      "guidance": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "reaction": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_yes": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_no": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    }
+  }
+}

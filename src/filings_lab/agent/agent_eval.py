@@ -5,7 +5,7 @@ Four question types, built from the generator's ground truth:
 * ``guidance``: "Did X raise, lower or keep its guidance in the release filed in May 2019?" The answer is
   right when it cites the guidance paragraph of that filing and states the direction.
 * ``reaction``: "How did the stock react to the release X filed in May 2019?" Right when the answer gives
-  that filing's 3 day abnormal return.
+  that filing's 3 day abnormal return, to one decimal place or better.
 * ``disclosure_yes``: "Has a securities class action been filed against X?" for a company that did disclose
   one. Right when the answer cites a paragraph that states it.
 * ``disclosure_no``: the same questions for companies that never disclosed the event. Right when the answer
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 
 import numpy as np
@@ -49,9 +50,13 @@ DISCLOSURE_QUESTIONS = {
 }
 ABSENCE = re.compile(
     r"\bno filing paragraphs? matched|\bnot (been )?disclos|\bno (such )?(disclosure|evidence|mention|record|indication)|"
-    r"\b(do|does|did) not (find|appear|mention|disclose|report|show|indicate|contain)|\bnot find\b|\bnothing in\b|"
+    r"\b(do|does|did|has|have) not (explicitly |specifically )?"
+    r"(find|appear|mention|disclose|report|show|indicate|contain|state|say)|\bnot find\b|\bnothing in\b|"
     r"\bno paragraph\b|\bnone of the\b|\bfound no\b|\bcould not find\b|\bno passage\b", re.I)
-PERCENT = re.compile(r"([+\-−]?\d+(?:\.\d+)?)\s*%")
+# a model types a negative number with whatever dash it likes: minus sign, en dash, figure dash, non breaking hyphen
+_MINUS = "\u2212\u2013\u2012\u2011\u2010"
+PERCENT = re.compile(rf"([+\-{_MINUS}]?\d+(?:\.\d+)?)\s*%")
+_EMPHASIS = re.compile(r"[*_`]+")  # markdown emphasis, which splits "does **not** state" for a pattern
 HEADLINE = {"guidance": "answer_correct", "reaction": "car_correct", "disclosure_yes": "support_cited", "disclosure_no": "abstained"}
 
 
@@ -101,9 +106,20 @@ def build_questions(store, truth: pd.DataFrame, per_type: int = 40, seed: int = 
     return questions
 
 
+def states_percent(text: str, value: float) -> bool:
+    """Whether the text gives ``value`` (a percentage) at the precision it chose to state: 5.63% as "5.63%" or as
+    "5.6%", but not as "6%", which could be the right number or any of ten wrong ones."""
+    for raw in PERCENT.findall(text):
+        number = re.sub(f"[{_MINUS}]", "-", raw)
+        decimals = len(number.partition(".")[2])
+        if decimals >= 1 and abs(float(number) - value) <= (0.011 if decimals >= 2 else 0.05 + 1e-9):
+            return True
+    return False
+
+
 def score_answer(q: dict, ans: dict) -> dict:
     """Mechanical checks of one answer against what the generator knows."""
-    text = ans.get("answer") or ""
+    text = _EMPHASIS.sub("", ans.get("answer") or "")
     cited = [c["paragraph_id"] for c in ans.get("citations", [])]
     support = set(q["support"])
     out = {"citation_valid_rate": ans.get("citation_valid_rate", 1.0), "n_citations": len(cited),
@@ -114,8 +130,7 @@ def score_answer(q: dict, ans: dict) -> dict:
         out["direction_stated"] = float(bool(DIRECTION[q["expected"]].search(text)))
         out["answer_correct"] = out["support_cited"] * out["direction_stated"]
     elif q["type"] == "reaction":
-        values = [float(v.replace("−", "-")) for v in PERCENT.findall(text)]
-        out["car_correct"] = float(any(abs(v - q["expected"] * 100) <= 0.011 for v in values))
+        out["car_correct"] = float(states_percent(text, q["expected"] * 100))
     elif q["type"] == "disclosure_yes":
         out["support_cited"] = float(bool(support & set(cited)))
         out["citation_precision"] = float(len(support & set(cited)) / len(set(cited))) if cited else 0.0
@@ -125,22 +140,41 @@ def score_answer(q: dict, ans: dict) -> dict:
     return out
 
 
-def run_agent(agent, questions: list[dict], system: str, log=None, workers: int = 1) -> pd.DataFrame:
+def run_agent(agent, questions: list[dict], system: str, log=None, workers: int = 1, retries: int = 0,
+              pause: float = 0.0, sleep=time.sleep, done: dict | None = None, on_row=None) -> pd.DataFrame:
     """Ask every question and score the answers. ``agent`` is an agent, or with ``workers`` above one a function
-    that makes one: each thread needs its own, because a tool box remembers the paragraphs of the request in hand."""
+    that makes one: each thread needs its own, because a tool box remembers the paragraphs of the request in hand.
+
+    A question that ends in an API error is asked again, up to ``retries`` more times, after ``pause`` seconds: a
+    free hosted API has outages lasting minutes (24 of 60 questions on the first real run), and an outage is not
+    an answer. ``attempts`` records how often each question was asked and what is still an error counts as wrong.
+    ``done`` holds rows kept from an interrupted run, by question id, and ``on_row`` receives each new row as it
+    arrives, which is how a run on a rate limited API survives being stopped.
+    """
     def one(a, q) -> dict:
         ans = a.ask(q["question"], q["ticker"]).to_dict()
         return {"system": system, "id": q["id"], "type": q["type"], **score_answer(q, ans),
-                "turns": ans.get("turns", 0), "tool_calls": len(ans.get("tool_calls") or []),
-                "answer": (ans.get("answer") or "")[:600]}
+                "turns": ans.get("turns", 0), "tool_calls": len(ans.get("tool_calls") or []), "attempts": 1,
+                "answer": ans.get("answer") or "", "error_text": str(ans.get("error") or ""),
+                "calls": [{"tool": c.get("tool"), "input": c.get("input")} for c in ans.get("tool_calls") or []]}
 
-    rows = []
+    def ask_all(batch: list[dict], every: int, attempt: int = 1) -> list[dict]:
+        if workers <= 1:
+            results = (one(single, q) for q in batch)
+            return [keep(n, row, len(batch), every, attempt) for n, row in enumerate(results, start=1)]
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return [keep(n, row, len(batch), every, attempt) for n, row in enumerate(pool.map(task, batch), start=1)]
+
+    def keep(n: int, row: dict, total: int, every: int, attempt: int) -> dict:
+        row["attempts"] = attempt
+        if on_row:
+            on_row(row)
+        if log and n % every == 0:
+            log(f"{system}: {n} of {total} questions")
+        return row
+
     if workers <= 1:
         single = agent() if callable(agent) and not hasattr(agent, "ask") else agent
-        for n, q in enumerate(questions, start=1):
-            rows.append(one(single, q))
-            if log and n % 50 == 0:
-                log(f"{system}: {n} of {len(questions)} questions")
     else:
         import threading
         from concurrent.futures import ThreadPoolExecutor
@@ -152,12 +186,37 @@ def run_agent(agent, questions: list[dict], system: str, log=None, workers: int 
                 local.agent = agent()
             return one(local.agent, q)
 
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            for n, row in enumerate(pool.map(task, questions), start=1):
-                rows.append(row)
-                if log and n % 20 == 0:
-                    log(f"{system}: {n} of {len(questions)} questions")
-    return pd.DataFrame(rows)
+    rows = dict(done or {})
+    if log and rows:
+        log(f"{system}: kept {len(rows)} answers from an interrupted run")
+    rows.update({r["id"]: r for r in ask_all([q for q in questions if q["id"] not in rows], 50 if workers <= 1 else 20)})
+    for attempt in range(2, retries + 2):
+        failed = [q for q in questions if rows[q["id"]]["error"]]
+        if not failed:
+            break
+        if log:
+            log(f"{system}: {len(failed)} questions ended in an API error, asking them again in {pause:.0f} s")
+        sleep(pause)
+        rows.update({r["id"]: r for r in ask_all(failed, 20, attempt)})
+    return pd.DataFrame([rows[q["id"]] for q in questions])
+
+
+def load_progress(path: Path, questions: list[dict]) -> dict[str, dict[int, dict]]:
+    """Answers an interrupted run saved, by system and question id: only those that match today's questions and
+    did not end in an error, so a failed question is asked again."""
+    kept: dict[str, dict[int, dict]] = {}
+    if not path.exists():
+        return kept
+    asked = {q["id"]: q["question"] for q in questions}
+    for line in path.read_text().splitlines():
+        row = json.loads(line)
+        if asked.get(row["id"]) != row.pop("question", None):
+            continue
+        if row["error"]:
+            kept.get(row["system"], {}).pop(row["id"], None)
+        else:
+            kept.setdefault(row["system"], {})[row["id"]] = row
+    return kept
 
 
 def _boot(values: np.ndarray, n_boot: int = 2000, seed: int = 0) -> tuple[float, float, float]:
@@ -184,7 +243,8 @@ def summarise(rows: pd.DataFrame) -> dict:
         out["systems"][s] = {"types": per_type, **extra,
                              "macro_score": float(np.mean([v["mean"] for v in per_type.values()])),
                              "citation_valid_rate": float(d["citation_valid_rate"].mean()),
-                             "errors": int(d["error"].sum()), "mean_turns": float(d["turns"].mean()),
+                             "errors": int(d["error"].sum()), "asked_again": int((d["attempts"] > 1).sum()),
+                             "mean_turns": float(d["turns"].mean()),
                              "empty_answers": int((d["answer"].fillna("").str.len() == 0).sum()),
                              "latency_p50_s": float(d["latency_s"].median()),
                              "latency_p95_s": float(d["latency_s"].quantile(0.95)), "cost_usd": float(d["cost_usd"].sum())}
@@ -216,11 +276,13 @@ def report_md(summary: dict, info: dict) -> str:
         cells = [f"{d['types'][t]['mean']:.3f} [{d['types'][t]['ci_low']:.3f}, {d['types'][t]['ci_high']:.3f}]" for t in HEADLINE]
         lines.append(f"| {s} | " + " | ".join(cells) + f" | {d['macro_score']:.3f} | {d['citation_valid_rate']:.3f} |")
     lines += ["", "| System | Guidance: right paragraph cited | Guidance: cited first | Disclosure: share of citations that state it | "
-              "Turns per question | Latency p50 / p95 (s) | Cost (USD) | Errors | Empty answers |", "|---|---|---|---|---|---|---|---|---|"]
+              "Turns per question | Latency p50 / p95 (s) | Cost (USD) | Asked again after an API error | Errors left | "
+              "Empty answers |", "|---|---|---|---|---|---|---|---|---|---|"]
     for s, d in summary["systems"].items():
         lines.append(f"| {s} | {d['guidance_support_cited']:.3f} | {d['guidance_first_citation_correct']:.3f} | "
                      f"{d['disclosure_citation_precision']:.3f} | {d['mean_turns']:.1f} | {d['latency_p50_s']:.3f} / "
-                     f"{d['latency_p95_s']:.3f} | {d['cost_usd']:.2f} | {d['errors']} | {d['empty_answers']} |")
+                     f"{d['latency_p95_s']:.3f} | {d['cost_usd']:.2f} | {d['asked_again']} | {d['errors']} | "
+                     f"{d['empty_answers']} |")
     if summary["paired"]:
         lines += ["", "| Paired difference on the same questions | " + " | ".join(t for t in HEADLINE) + " |",
                   "|---|" + "---|" * len(HEADLINE)]
@@ -236,7 +298,7 @@ def report_md(summary: dict, info: dict) -> str:
 
 def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hybrid"), agent: str = "offline",
              per_type: int = 40, seed: int = 0, embed_model: str | None = None, client=None, log=print,
-             workers: int = 1) -> dict:
+             workers: int = 1, retries: int = 2, retry_pause: float = 90.0, resume: bool = True) -> dict:
     from .agent import AGENT_MODEL, ClaudeAgent, ExtractiveAgent
     from .embeddings import get_embedder
     from .openai_agent import OpenAIChatAgent
@@ -248,11 +310,28 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
     questions = build_questions(store, pd.read_parquet(truth_path), per_type, seed)
     bm25 = BM25Index(store.paragraphs)
     embedder = get_embedder(embed_model) if any(m != "bm25" for m in modes) else None
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    # a hosted run takes an hour on a free API: every answer is appended here as it arrives and the file goes when
+    # the run completes, so a stopped run picks up where it was
+    progress = out / "progress.jsonl"
+    if not resume:
+        progress.unlink(missing_ok=True)
+    saved = load_progress(progress, questions) if agent != "offline" else {}
+    asked = {q["id"]: q["question"] for q in questions}
+
+    def save(row: dict) -> None:
+        with progress.open("a") as f:
+            f.write(json.dumps({**row, "question": asked[row["id"]]}, default=str) + "\n")
+
+    api: dict = {}
     frames = []
     for mode in modes:
         index = build_index(store.paragraphs, mode, lake=lake, embedder=embedder, bm25=bm25, log=log)
         if agent == "claude":
-            frames.append(run_agent(ClaudeAgent(ToolBox(store, index), client=client), questions, f"{AGENT_MODEL}, {mode}", log))
+            name = f"{AGENT_MODEL}, {mode}"
+            frames.append(run_agent(ClaudeAgent(ToolBox(store, index), client=client), questions, name, log,
+                                    retries=retries, pause=retry_pause, done=saved.get(name), on_row=save))
         elif agent == "openai":
             from ..openai_compat import ChatClient
 
@@ -261,7 +340,12 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
             def make(index=index, shared=shared):
                 return OpenAIChatAgent(ToolBox(store, index), client=shared)
 
-            frames.append(run_agent(make, questions, f"{default_model()}, {mode}", log, workers=workers))
+            name = f"{default_model()}, {mode}"
+            frames.append(run_agent(make, questions, name, log, workers=workers, retries=retries, pause=retry_pause,
+                                    done=saved.get(name), on_row=save))
+            if client is None or mode == modes[-1]:  # a client made here serves one mode; one passed in serves them all
+                api = {"api_requests": api.get("api_requests", 0) + getattr(shared, "requests", 0),
+                       "rate_limited": api.get("rate_limited", 0) + getattr(shared, "limited", 0)}
         else:
             for scoped in (False, True):
                 name = f"offline, {mode}" + (", dated questions scoped" if scoped else "")
@@ -274,14 +358,14 @@ def evaluate(lake: str, truth_path: str, out_dir: str | Path, modes=("bm25", "hy
     info = {"questions": len(questions), "by_type": {t: sum(q["type"] == t for q in questions) for t in HEADLINE},
             "agent": {"offline": "offline extractive", "claude": f"hosted model ({AGENT_MODEL})"}.get(
                 agent, f"hosted model through an OpenAI compatible API ({default_model()})"), "retrieval": list(modes),
-            "per_type": per_type, "seed": seed}
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
+            "per_type": per_type, "seed": seed, "retries": 0 if agent == "offline" else retries, **api}
     (out / "metrics.json").write_text(json.dumps({"info": info, **summary}, indent=2))
     (out / "report.md").write_text(report_md(summary, info))
     (out / "questions.jsonl").write_text("".join(json.dumps(q, default=str) + "\n" for q in questions))
-    rows.drop(columns=["answer"]).round(4).to_csv(out / "scores.csv", index=False)
-    if agent != "offline":  # a model's wording is worth reading next to its marks; the offline agent only quotes
+    rows.drop(columns=["answer", "error_text", "calls"]).round(4).to_csv(out / "scores.csv", index=False)
+    if agent != "offline":  # a model's wording and its searches are worth reading next to its marks; the offline agent only quotes
         (out / "answers.jsonl").write_text("".join(
-            json.dumps({"system": r.system, "id": int(r.id), "answer": r.answer}) + "\n" for r in rows.itertuples(index=False)))
+            json.dumps({"system": r.system, "id": int(r.id), "answer": r.answer, "error": r.error_text, "tool_calls": r.calls},
+                       default=str) + "\n" for r in rows.itertuples(index=False)))
+    progress.unlink(missing_ok=True)
     return {"info": info, **summary}

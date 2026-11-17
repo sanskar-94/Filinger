@@ -12,15 +12,15 @@
 | offline, hybrid, dated questions scoped | 0.925 [0.825, 1.000] | 1.000 [1.000, 1.000] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 0.731 | 1.000 |
 | offline, hybrid, dated questions scoped, company name kept | 0.600 [0.450, 0.750] | 1.000 [1.000, 1.000] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 0.650 | 1.000 |
 
-| System | Guidance: right paragraph cited | Guidance: cited first | Disclosure: share of citations that state it | Latency p50 / p95 (s) | Cost (USD) | Errors |
-|---|---|---|---|---|---|---|
-| offline, bm25 | 0.625 | 0.125 | 0.642 | 0.006 / 0.024 | 0.00 | 0 |
-| offline, bm25, dated questions scoped | 1.000 | 0.225 | 0.642 | 0.006 / 0.017 | 0.00 | 0 |
-| offline, dense | 0.050 | 0.025 | 0.537 | 0.008 / 0.037 | 0.00 | 0 |
-| offline, dense, dated questions scoped | 0.475 | 0.150 | 0.537 | 0.005 / 0.021 | 0.00 | 0 |
-| offline, hybrid | 0.075 | 0.025 | 0.537 | 0.008 / 0.027 | 0.00 | 0 |
-| offline, hybrid, dated questions scoped | 0.925 | 0.150 | 0.537 | 0.010 / 0.024 | 0.00 | 0 |
-| offline, hybrid, dated questions scoped, company name kept | 0.600 | 0.000 | 0.525 | 0.023 / 0.073 | 0.00 | 0 |
+| System | Guidance: right paragraph cited | Guidance: cited first | Disclosure: share of citations that state it | Turns per question | Latency p50 / p95 (s) | Cost (USD) | Asked again after an API error | Errors left | Empty answers |
+|---|---|---|---|---|---|---|---|---|---|
+| offline, bm25 | 0.625 | 0.125 | 0.642 | 1.0 | 0.004 / 0.005 | 0.00 | 0 | 0 | 0 |
+| offline, bm25, dated questions scoped | 1.000 | 0.225 | 0.642 | 1.0 | 0.004 / 0.004 | 0.00 | 0 | 0 | 0 |
+| offline, dense | 0.050 | 0.025 | 0.537 | 1.0 | 0.004 / 0.010 | 0.00 | 0 | 0 | 0 |
+| offline, dense, dated questions scoped | 0.475 | 0.150 | 0.537 | 1.0 | 0.004 / 0.005 | 0.00 | 0 | 0 | 0 |
+| offline, hybrid | 0.075 | 0.025 | 0.537 | 1.0 | 0.008 / 0.013 | 0.00 | 0 | 0 | 0 |
+| offline, hybrid, dated questions scoped | 0.925 | 0.150 | 0.537 | 1.0 | 0.007 / 0.008 | 0.00 | 0 | 0 | 0 |
+| offline, hybrid, dated questions scoped, company name kept | 0.600 | 0.000 | 0.525 | 1.0 | 0.013 / 0.014 | 0.00 | 0 | 0 | 0 |
 
 | Paired difference on the same questions | guidance | reaction | disclosure_yes | disclosure_no |
 |---|---|---|---|---|

@@ -29,11 +29,12 @@ AGENT_MODEL = os.environ.get("FLAB_AGENT_MODEL", "claude-opus-5-5")
 SYSTEM_PROMPT = """You are an equity research assistant with access to a company's SEC filings (10-K, 10-Q, 8-K), daily prices and the lab's model outputs, all through tools.
 
 How to work:
-1. Use the tools to find evidence before answering. Search with filters when the question names a company, form or period, and read neighbouring paragraphs when context matters.
+1. Use the tools to find evidence before answering. Filter a search by company when the question names one, and by form or date only when the question names a form or a period. A question such as "has the company ever disclosed X" covers its whole filing history, so leave the form and both dates empty: a date range you add yourself hides every older filing. Read neighbouring paragraphs when context matters.
 2. Every statement that comes from a filing must be followed immediately by a citation in the form [cite:<paragraph_id>], using only paragraph ids that a tool returned in this conversation. Never invent or alter an id.
 3. Numbers from get_event_return, get_price_history or get_model_signal are cited as (market data) or (model output) instead.
 4. If the filings do not answer the question, say so plainly rather than guessing.
-5. Keep answers short and specific: lead with the answer, then the supporting points. This is research support, not investment advice."""
+5. An earnings release is an 8-K with Item 2.02 (results of operations). The 10-Q or 10-K for the same quarter is the periodic report, a different filing with its own market reaction.
+6. Keep answers short and specific: lead with the answer, then the supporting points. This is research support, not investment advice."""
 
 
 @dataclass
@@ -92,6 +93,16 @@ def build_citations(text: str, toolbox: ToolBox) -> tuple[list[Citation], list[s
     return valid, invalid
 
 
+OUT_OF_TURNS = ("You have used your search budget. Answer now from what the tools returned. If the filings you searched do "
+                "not state what was asked, say plainly that they do not disclose it, and do not search again.")
+
+
+def _holds_tool_results(message: dict) -> bool:
+    content = message.get("content")
+    return (message.get("role") == "user" and isinstance(content, list) and bool(content)
+            and isinstance(content[0], dict) and content[0].get("type") == "tool_result")
+
+
 class ClaudeAgent:
     def __init__(self, toolbox: ToolBox, model: str = AGENT_MODEL, effort: str = "high", max_turns: int = 8,
                  client=None, use_fallbacks: bool = True):
@@ -102,12 +113,14 @@ class ClaudeAgent:
         self.use_fallbacks = use_fallbacks
         self.tools = [{**t, "strict": True} for t in TOOL_DEFS]
 
-    def _create(self, messages):
+    def _create(self, messages, final: bool = False):
         params = {
             "model": self.model, "max_tokens": 16000, "tools": self.tools, "messages": messages,
             "system": [{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             "output_config": {"effort": self.effort},
         }
+        if final:
+            params["tool_choice"] = {"type": "none"}  # the tools stay declared, so the cached prefix still matches
         if self.use_fallbacks:
             return self.client.beta.messages.create(**params, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         return self.client.messages.create(**params)
@@ -125,7 +138,12 @@ class ClaudeAgent:
         try:
             while turns < self.max_turns:
                 turns += 1
-                resp = self._create(messages)
+                last = turns == self.max_turns
+                if last and _holds_tool_results(messages[-1]):
+                    # the last turn must be an answer, not one more search: the instruction goes after the tool
+                    # results in the same user message and the request withdraws the tools
+                    messages[-1]["content"].append({"type": "text", "text": OUT_OF_TURNS})
+                resp = self._create(messages, final=last)
                 u = resp.usage
                 usage["in"] += u.input_tokens or 0
                 usage["out"] += u.output_tokens or 0
@@ -139,7 +157,7 @@ class ClaudeAgent:
                 if stop == "pause_turn":
                     continue
                 tool_uses = [b for b in resp.content if b.type == "tool_use"]
-                if stop == "tool_use" and tool_uses:
+                if stop == "tool_use" and tool_uses and not last:
                     results = []
                     for b in tool_uses:  # all results go back in one user message
                         c0 = time.perf_counter()
@@ -244,8 +262,8 @@ class ExtractiveAgent:
         if self.PRICE_WORDS.search(question):
             ev = json.loads(self.tb.execute("get_event_return", {"accession": res[0]["accession"]}))
             calls.append({"tool": "get_event_return", "input": {"accession": res[0]["accession"]}})
-            if "car_0_2" in ev and ev["car_0_2"] is not None:
-                lines.append(f"Market reaction to the top filing: {ev['car_0_2'] * 100:+.2f}% abnormal return over 3 days "
+            if ev.get("car_3d") is not None:
+                lines.append(f"Market reaction to the top filing: {ev['car_3d'] * 100:+.2f}% abnormal return over 3 days "
                              f"starting {ev['event_date']} (market data).")
         text = "\n".join(lines)
         valid, invalid = build_citations(text, self.tb)

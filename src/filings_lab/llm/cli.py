@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 
@@ -46,7 +47,9 @@ def make_system(spec: str, style: str = "full"):
 
         client = ChatClient()
         model = rest or default_model()
-        return OpenAICompatExtractor(client.base_url, model, name=label or f"api:{model}", style=style, client=client)
+        # room for a model that reasons before it writes: the 768 that suits the fine tuned extractor cut most answers off
+        return OpenAICompatExtractor(client.base_url, model, name=label or f"api:{model}", style=style, client=client,
+                                     max_tokens=int(os.environ.get("FLAB_OPENAI_MAX_TOKENS", "4096")))
     if kind == "vllm":
         parts = rest.split("|")
         return OpenAICompatExtractor(parts[0], parts[1], guided=len(parts) > 2 and parts[2] == "guided", style=style,

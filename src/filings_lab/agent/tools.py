@@ -22,15 +22,18 @@ TOOL_DEFS: list[dict[str, Any]] = [
     {
         "name": "search_filings",
         "description": "Full text search over paragraphs of SEC filings (10-K, 10-Q, 8-K MD&A, risk factors, legal proceedings and 8-K items). "
-                       "Returns the best matching paragraphs with their paragraph_id, which is what you cite. Use filters whenever the question names a company, form or period.",
+                       "Returns the best matching paragraphs with their paragraph_id, which is what you cite. Filter by company when the question names one. "
+                       "Filter by form or date only when the question names a form or a period: every argument must be sent, "
+                       "and null is the right value for a filter the question does not call for.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "keywords or a short natural language query"},
                 "ticker": {**NULLABLE_STR, "description": "restrict to one company, e.g. ACME; null for all"},
-                "form": {**NULLABLE_STR, "description": "10-K, 10-Q or 8-K; null for all"},
-                "date_from": {**NULLABLE_STR, "description": "YYYY-MM-DD or null"},
-                "date_to": {**NULLABLE_STR, "description": "YYYY-MM-DD or null"},
+                "form": {**NULLABLE_STR, "description": "10-K, 10-Q or 8-K; null searches all forms at once"},
+                "date_from": {**NULLABLE_STR, "description": "YYYY-MM-DD, or null for no lower bound. The filings go back more than "
+                                                             "ten years and a disclosure can sit in any of them"},
+                "date_to": {**NULLABLE_STR, "description": "YYYY-MM-DD, or null for no upper bound"},
                 "k": {"type": "integer", "description": "number of results, 1 to 10"},
             },
             "required": ["query", "ticker", "form", "date_from", "date_to", "k"],
@@ -197,8 +200,10 @@ class ToolBox:
             return {"error": f"no reaction data for {accession}"}
         e = ev.loc[accession]
         return {"accession": accession, "ticker": e["ticker"], "form": e["form"], "event_date": _clean(e["event_date"]),
-                "return_day0": _clean(e["ret_0"]), "car_0_2": _clean(e["car"]), "car_market_model": _clean(e.get("car_mm")),
-                "note": "CAR is the 3 trading day return in excess of the market (SPY) starting at the first tradable day."}
+                "return_day0": _clean(e["ret_0"]), "car_3d": _clean(e["car"]), "car_3d_market_model": _clean(e.get("car_mm")),
+                "note": "car_3d is the reaction to report: the stock's return minus the market's (SPY) over the 3 trading days "
+                        "starting at the first tradable day. car_3d_market_model is a second estimate of the same window, "
+                        "net of the return the stock's beta predicts; give it only as a check, labelled as such."}
 
     def t_extract_signals(self, accession):
         from ..llm.dataset import TEXT_SECTIONS

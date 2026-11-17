@@ -1,0 +1,135 @@
+{
+  "info": {
+    "questions": 60,
+    "by_type": {
+      "guidance": 10,
+      "reaction": 10,
+      "disclosure_yes": 20,
+      "disclosure_no": 20
+    },
+    "agent": "hosted model through an OpenAI compatible API (nvidia/nemotron-3.5-lightning-30b-a3b)",
+    "retrieval": [
+      "bm25",
+      "hybrid"
+    ],
+    "per_type": 10,
+    "seed": 2,
+    "retries": 2,
+    "api_requests": 306,
+    "rate_limited": 36
+  },
+  "systems": {
+    "nvidia/nemotron-3.5-lightning-30b-a3b, bm25": {
+      "types": {
+        "guidance": {
+          "n": 10,
+          "metric": "answer_correct",
+          "mean": 0.9,
+          "ci_low": 0.7,
+          "ci_high": 1.0
+        },
+        "reaction": {
+          "n": 10,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 20,
+          "metric": "support_cited",
+          "mean": 0.85,
+          "ci_low": 0.69875,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 20,
+          "metric": "abstained",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        }
+      },
+      "guidance_support_cited": 0.9,
+      "guidance_first_citation_correct": 0.9,
+      "disclosure_citation_precision": 0.85,
+      "macro_score": 0.9375,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "asked_again": 0,
+      "mean_turns": 4.666666666666667,
+      "empty_answers": 0,
+      "latency_p50_s": 31.327304229023866,
+      "latency_p95_s": 79.37255571696733,
+      "cost_usd": 0.0
+    },
+    "nvidia/nemotron-3.5-lightning-30b-a3b, hybrid": {
+      "types": {
+        "guidance": {
+          "n": 10,
+          "metric": "answer_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "reaction": {
+          "n": 10,
+          "metric": "car_correct",
+          "mean": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "disclosure_yes": {
+          "n": 20,
+          "metric": "support_cited",
+          "mean": 0.95,
+          "ci_low": 0.85,
+          "ci_high": 1.0
+        },
+        "disclosure_no": {
+          "n": 20,
+          "metric": "abstained",
+          "mean": 0.95,
+          "ci_low": 0.85,
+          "ci_high": 1.0
+        }
+      },
+      "guidance_support_cited": 1.0,
+      "guidance_first_citation_correct": 1.0,
+      "disclosure_citation_precision": 0.9400000000000001,
+      "macro_score": 0.9750000000000001,
+      "citation_valid_rate": 1.0,
+      "errors": 0,
+      "asked_again": 0,
+      "mean_turns": 4.5,
+      "empty_answers": 0,
+      "latency_p50_s": 27.982233583490597,
+      "latency_p95_s": 626.1131012232479,
+      "cost_usd": 0.0
+    }
+  },
+  "paired": {
+    "nvidia/nemotron-3.5-lightning-30b-a3b, hybrid minus nvidia/nemotron-3.5-lightning-30b-a3b, bm25": {
+      "guidance": {
+        "diff": 0.1,
+        "ci_low": 0.0,
+        "ci_high": 0.3
+      },
+      "reaction": {
+        "diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "disclosure_yes": {
+        "diff": 0.1,
+        "ci_low": -0.1,
+        "ci_high": 0.3
+      },
+      "disclosure_no": {
+        "diff": -0.05,
+        "ci_low": -0.15,
+        "ci_high": 0.0
+      }
+    }
+  }
+}

@@ -1,0 +1,301 @@
+system,id,type,citation_valid_rate,n_citations,latency_s,cost_usd,error,support_cited,first_citation_correct,direction_stated,answer_correct,headline,turns,tool_calls,attempts,car_correct,citation_precision,abstained
+"offline, bm25",0,guidance,1.0,4,0.0105,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25",1,guidance,1.0,4,0.0062,0.0,False,0.0,0.0,1.0,0.0,0.0,1,1,1,,,
+"offline, bm25",2,guidance,1.0,4,0.0058,0.0,False,1.0,1.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25",3,guidance,1.0,4,0.005,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25",4,guidance,1.0,4,0.0052,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25",5,guidance,1.0,4,0.0055,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, bm25",6,guidance,1.0,4,0.0051,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25",7,guidance,1.0,4,0.0048,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, bm25",8,guidance,1.0,4,0.0051,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25",9,guidance,1.0,4,0.0049,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25",10,reaction,1.0,4,0.0055,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",11,reaction,1.0,4,0.0049,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",12,reaction,1.0,4,0.0069,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",13,reaction,1.0,4,0.0051,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",14,reaction,1.0,4,0.0049,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",15,reaction,1.0,4,0.005,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",16,reaction,1.0,4,0.0051,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",17,reaction,1.0,4,0.0047,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",18,reaction,1.0,4,0.0068,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",19,reaction,1.0,4,0.0057,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25",20,disclosure_yes,1.0,4,0.005,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25",21,disclosure_yes,1.0,4,0.0053,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25",22,disclosure_yes,1.0,1,0.004,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25",23,disclosure_yes,1.0,1,0.0042,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25",24,disclosure_yes,1.0,4,0.0068,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25",25,disclosure_yes,1.0,1,0.0048,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25",26,disclosure_yes,1.0,1,0.0043,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25",27,disclosure_yes,1.0,4,0.0043,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25",28,disclosure_yes,1.0,4,0.0045,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, bm25",29,disclosure_yes,1.0,4,0.0043,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25",30,disclosure_yes,1.0,4,0.0045,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25",31,disclosure_yes,1.0,4,0.0057,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25",32,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25",33,disclosure_yes,1.0,4,0.0052,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, bm25",34,disclosure_yes,1.0,4,0.0048,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25",35,disclosure_yes,1.0,4,0.0048,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25",36,disclosure_yes,1.0,4,0.0053,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25",37,disclosure_yes,1.0,4,0.0051,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25",38,disclosure_yes,1.0,4,0.0099,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25",39,disclosure_yes,1.0,4,0.0061,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25",40,disclosure_no,1.0,4,0.0051,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",41,disclosure_no,1.0,4,0.0047,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",42,disclosure_no,1.0,4,0.0047,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",43,disclosure_no,1.0,4,0.005,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",44,disclosure_no,1.0,4,0.0049,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",45,disclosure_no,1.0,4,0.0052,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",46,disclosure_no,1.0,4,0.0057,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",47,disclosure_no,1.0,4,0.005,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",48,disclosure_no,1.0,4,0.005,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",49,disclosure_no,1.0,4,0.0049,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",50,disclosure_no,1.0,4,0.0055,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",51,disclosure_no,1.0,4,0.005,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",52,disclosure_no,1.0,4,0.0057,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",53,disclosure_no,1.0,4,0.0057,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",54,disclosure_no,1.0,0,0.0043,0.0,False,,,,,1.0,1,1,1,,,1.0
+"offline, bm25",55,disclosure_no,1.0,0,0.0045,0.0,False,,,,,1.0,1,1,1,,,1.0
+"offline, bm25",56,disclosure_no,1.0,1,0.0046,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",57,disclosure_no,1.0,1,0.0044,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",58,disclosure_no,1.0,2,0.0052,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25",59,disclosure_no,1.0,4,0.0053,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",0,guidance,1.0,4,0.0046,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",1,guidance,1.0,3,0.005,0.0,False,1.0,1.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",2,guidance,1.0,4,0.0046,0.0,False,1.0,1.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",3,guidance,1.0,4,0.0049,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",4,guidance,1.0,4,0.0048,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",5,guidance,1.0,4,0.0049,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",6,guidance,1.0,4,0.0046,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",7,guidance,1.0,4,0.0047,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",8,guidance,1.0,4,0.0046,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",9,guidance,1.0,4,0.0055,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, bm25, dated questions scoped",10,reaction,1.0,2,0.0054,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",11,reaction,1.0,3,0.0059,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",12,reaction,1.0,2,0.0045,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",13,reaction,1.0,3,0.0044,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",14,reaction,1.0,2,0.0042,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",15,reaction,1.0,2,0.0043,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",16,reaction,1.0,2,0.0043,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",17,reaction,1.0,2,0.0042,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",18,reaction,1.0,3,0.0043,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",19,reaction,1.0,3,0.0045,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, bm25, dated questions scoped",20,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25, dated questions scoped",21,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25, dated questions scoped",22,disclosure_yes,1.0,1,0.0043,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25, dated questions scoped",23,disclosure_yes,1.0,1,0.004,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25, dated questions scoped",24,disclosure_yes,1.0,4,0.0045,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25, dated questions scoped",25,disclosure_yes,1.0,1,0.0044,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25, dated questions scoped",26,disclosure_yes,1.0,1,0.004,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25, dated questions scoped",27,disclosure_yes,1.0,4,0.0044,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25, dated questions scoped",28,disclosure_yes,1.0,4,0.0046,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, bm25, dated questions scoped",29,disclosure_yes,1.0,4,0.0044,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25, dated questions scoped",30,disclosure_yes,1.0,4,0.0056,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25, dated questions scoped",31,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25, dated questions scoped",32,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25, dated questions scoped",33,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, bm25, dated questions scoped",34,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25, dated questions scoped",35,disclosure_yes,1.0,4,0.0046,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25, dated questions scoped",36,disclosure_yes,1.0,4,0.0046,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25, dated questions scoped",37,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, bm25, dated questions scoped",38,disclosure_yes,1.0,4,0.0047,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, bm25, dated questions scoped",39,disclosure_yes,1.0,4,0.0048,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, bm25, dated questions scoped",40,disclosure_no,1.0,4,0.006,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",41,disclosure_no,1.0,4,0.0048,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",42,disclosure_no,1.0,4,0.0052,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",43,disclosure_no,1.0,4,0.0067,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",44,disclosure_no,1.0,4,0.0054,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",45,disclosure_no,1.0,4,0.0057,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",46,disclosure_no,1.0,4,0.0048,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",47,disclosure_no,1.0,4,0.0057,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",48,disclosure_no,1.0,4,0.0051,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",49,disclosure_no,1.0,4,0.0048,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",50,disclosure_no,1.0,4,0.0054,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",51,disclosure_no,1.0,4,0.0057,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",52,disclosure_no,1.0,4,0.0053,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",53,disclosure_no,1.0,4,0.0047,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",54,disclosure_no,1.0,0,0.0039,0.0,False,,,,,1.0,1,1,1,,,1.0
+"offline, bm25, dated questions scoped",55,disclosure_no,1.0,0,0.0039,0.0,False,,,,,1.0,1,1,1,,,1.0
+"offline, bm25, dated questions scoped",56,disclosure_no,1.0,1,0.0052,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",57,disclosure_no,1.0,1,0.0042,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",58,disclosure_no,1.0,2,0.0042,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, bm25, dated questions scoped",59,disclosure_no,1.0,4,0.0054,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",0,guidance,1.0,4,0.0519,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",1,guidance,1.0,4,0.0175,0.0,False,0.0,0.0,1.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",2,guidance,1.0,4,0.0084,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",3,guidance,1.0,4,0.0147,0.0,False,0.0,0.0,1.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",4,guidance,1.0,4,0.0171,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",5,guidance,1.0,4,0.0087,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid",6,guidance,1.0,4,0.0144,0.0,False,0.0,0.0,1.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",7,guidance,1.0,4,0.019,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",8,guidance,1.0,4,0.0149,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",9,guidance,1.0,4,0.0095,0.0,False,0.0,0.0,1.0,0.0,0.0,1,1,1,,,
+"offline, hybrid",10,reaction,1.0,4,0.0175,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid",11,reaction,1.0,4,0.0211,0.0,False,,,,,0.0,1,2,1,0.0,,
+"offline, hybrid",12,reaction,1.0,4,0.0171,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid",13,reaction,1.0,4,0.0181,0.0,False,,,,,0.0,1,2,1,0.0,,
+"offline, hybrid",14,reaction,1.0,4,0.019,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid",15,reaction,1.0,4,0.0155,0.0,False,,,,,0.0,1,2,1,0.0,,
+"offline, hybrid",16,reaction,1.0,4,0.0158,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid",17,reaction,1.0,4,0.0207,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid",18,reaction,1.0,4,0.0158,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid",19,reaction,1.0,4,0.0153,0.0,False,,,,,0.0,1,2,1,0.0,,
+"offline, hybrid",20,disclosure_yes,1.0,4,0.0167,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",21,disclosure_yes,1.0,4,0.0164,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",22,disclosure_yes,1.0,4,0.015,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",23,disclosure_yes,1.0,4,0.0103,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",24,disclosure_yes,1.0,4,0.0178,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",25,disclosure_yes,1.0,4,0.0264,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",26,disclosure_yes,1.0,4,0.0144,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",27,disclosure_yes,1.0,4,0.0193,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",28,disclosure_yes,1.0,4,0.018,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, hybrid",29,disclosure_yes,1.0,4,0.0235,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",30,disclosure_yes,1.0,4,0.0152,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid",31,disclosure_yes,1.0,4,0.0297,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid",32,disclosure_yes,1.0,4,0.0169,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid",33,disclosure_yes,1.0,4,0.0118,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, hybrid",34,disclosure_yes,1.0,4,0.0187,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid",35,disclosure_yes,1.0,4,0.0114,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid",36,disclosure_yes,1.0,4,0.0087,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, hybrid",37,disclosure_yes,1.0,4,0.0319,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid",38,disclosure_yes,1.0,4,0.0136,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid",39,disclosure_yes,1.0,4,0.0093,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, hybrid",40,disclosure_no,1.0,4,0.0094,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",41,disclosure_no,1.0,4,0.009,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",42,disclosure_no,1.0,4,0.0098,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",43,disclosure_no,1.0,4,0.0188,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",44,disclosure_no,1.0,4,0.0117,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",45,disclosure_no,1.0,4,0.0084,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",46,disclosure_no,1.0,4,0.0085,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",47,disclosure_no,1.0,4,0.0107,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",48,disclosure_no,1.0,4,0.0099,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",49,disclosure_no,1.0,4,0.0099,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",50,disclosure_no,1.0,4,0.0102,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",51,disclosure_no,1.0,4,0.0095,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",52,disclosure_no,1.0,4,0.0097,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",53,disclosure_no,1.0,4,0.0093,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",54,disclosure_no,1.0,4,0.0094,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",55,disclosure_no,1.0,4,0.0092,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",56,disclosure_no,1.0,4,0.0086,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",57,disclosure_no,1.0,4,0.0084,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",58,disclosure_no,1.0,4,0.0087,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid",59,disclosure_no,1.0,4,0.0084,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",0,guidance,1.0,4,0.0081,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",1,guidance,1.0,4,0.0082,0.0,False,1.0,1.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",2,guidance,1.0,4,0.008,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",3,guidance,1.0,4,0.0083,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",4,guidance,1.0,4,0.0084,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",5,guidance,1.0,4,0.0084,0.0,False,1.0,1.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",6,guidance,1.0,4,0.0086,0.0,False,1.0,1.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",7,guidance,1.0,4,0.0086,0.0,False,1.0,1.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",8,guidance,1.0,4,0.0082,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",9,guidance,1.0,4,0.0081,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped",10,reaction,1.0,4,0.0083,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",11,reaction,1.0,4,0.0082,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",12,reaction,1.0,4,0.0083,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",13,reaction,1.0,4,0.0082,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",14,reaction,1.0,4,0.0087,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",15,reaction,1.0,4,0.0082,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",16,reaction,1.0,4,0.0084,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",17,reaction,1.0,4,0.0083,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",18,reaction,1.0,4,0.0081,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",19,reaction,1.0,4,0.0084,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped",20,disclosure_yes,1.0,4,0.0082,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",21,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",22,disclosure_yes,1.0,4,0.008,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",23,disclosure_yes,1.0,4,0.008,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",24,disclosure_yes,1.0,4,0.0082,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",25,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",26,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",27,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",28,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, hybrid, dated questions scoped",29,disclosure_yes,1.0,4,0.0083,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",30,disclosure_yes,1.0,4,0.0082,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped",31,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped",32,disclosure_yes,1.0,4,0.0083,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped",33,disclosure_yes,1.0,4,0.0084,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, hybrid, dated questions scoped",34,disclosure_yes,1.0,4,0.0082,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped",35,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped",36,disclosure_yes,1.0,4,0.008,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, hybrid, dated questions scoped",37,disclosure_yes,1.0,4,0.0081,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped",38,disclosure_yes,1.0,4,0.008,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped",39,disclosure_yes,1.0,4,0.0083,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, hybrid, dated questions scoped",40,disclosure_no,1.0,4,0.0086,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",41,disclosure_no,1.0,4,0.0089,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",42,disclosure_no,1.0,4,0.0091,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",43,disclosure_no,1.0,4,0.009,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",44,disclosure_no,1.0,4,0.0086,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",45,disclosure_no,1.0,4,0.0087,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",46,disclosure_no,1.0,4,0.0085,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",47,disclosure_no,1.0,4,0.0083,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",48,disclosure_no,1.0,4,0.0081,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",49,disclosure_no,1.0,4,0.0084,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",50,disclosure_no,1.0,4,0.0085,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",51,disclosure_no,1.0,4,0.0083,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",52,disclosure_no,1.0,4,0.0081,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",53,disclosure_no,1.0,4,0.0081,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",54,disclosure_no,1.0,4,0.0083,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",55,disclosure_no,1.0,4,0.0081,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",56,disclosure_no,1.0,4,0.0082,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",57,disclosure_no,1.0,4,0.0084,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",58,disclosure_no,1.0,4,0.0082,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped",59,disclosure_no,1.0,4,0.0082,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",0,guidance,1.0,4,0.0169,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",1,guidance,1.0,4,0.0184,0.0,False,0.0,0.0,0.0,0.0,0.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",2,guidance,1.0,4,0.0166,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",3,guidance,1.0,4,0.017,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",4,guidance,1.0,4,0.0211,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",5,guidance,1.0,4,0.019,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",6,guidance,1.0,4,0.0177,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",7,guidance,1.0,4,0.0182,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",8,guidance,1.0,4,0.0183,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",9,guidance,1.0,4,0.0184,0.0,False,1.0,0.0,1.0,1.0,1.0,1,1,1,,,
+"offline, hybrid, dated questions scoped, company name kept",10,reaction,1.0,4,0.0182,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",11,reaction,1.0,4,0.0157,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",12,reaction,1.0,4,0.0164,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",13,reaction,1.0,4,0.017,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",14,reaction,1.0,4,0.015,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",15,reaction,1.0,4,0.0162,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",16,reaction,1.0,4,0.017,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",17,reaction,1.0,4,0.0169,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",18,reaction,1.0,4,0.0158,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",19,reaction,1.0,4,0.0165,0.0,False,,,,,1.0,1,2,1,1.0,,
+"offline, hybrid, dated questions scoped, company name kept",20,disclosure_yes,1.0,4,0.0166,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",21,disclosure_yes,1.0,4,0.017,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",22,disclosure_yes,1.0,4,0.0152,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",23,disclosure_yes,1.0,4,0.0145,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",24,disclosure_yes,1.0,4,0.0152,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",25,disclosure_yes,1.0,4,0.0143,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",26,disclosure_yes,1.0,4,0.0143,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",27,disclosure_yes,1.0,4,0.015,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",28,disclosure_yes,1.0,4,0.0147,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, hybrid, dated questions scoped, company name kept",29,disclosure_yes,1.0,4,0.0157,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",30,disclosure_yes,1.0,4,0.0153,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped, company name kept",31,disclosure_yes,1.0,4,0.0143,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped, company name kept",32,disclosure_yes,1.0,4,0.0146,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped, company name kept",33,disclosure_yes,1.0,4,0.015,0.0,False,1.0,,,,1.0,1,1,1,,0.75,
+"offline, hybrid, dated questions scoped, company name kept",34,disclosure_yes,1.0,4,0.0148,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped, company name kept",35,disclosure_yes,1.0,4,0.0143,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped, company name kept",36,disclosure_yes,1.0,4,0.0153,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, hybrid, dated questions scoped, company name kept",37,disclosure_yes,1.0,4,0.0168,0.0,False,1.0,,,,1.0,1,1,1,,0.25,
+"offline, hybrid, dated questions scoped, company name kept",38,disclosure_yes,1.0,4,0.016,0.0,False,1.0,,,,1.0,1,1,1,,0.5,
+"offline, hybrid, dated questions scoped, company name kept",39,disclosure_yes,1.0,4,0.0157,0.0,False,1.0,,,,1.0,1,1,1,,1.0,
+"offline, hybrid, dated questions scoped, company name kept",40,disclosure_no,1.0,4,0.0165,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",41,disclosure_no,1.0,4,0.0171,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",42,disclosure_no,1.0,4,0.0165,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",43,disclosure_no,1.0,4,0.0181,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",44,disclosure_no,1.0,4,0.0169,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",45,disclosure_no,1.0,4,0.0173,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",46,disclosure_no,1.0,4,0.0172,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",47,disclosure_no,1.0,4,0.0169,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",48,disclosure_no,1.0,4,0.0168,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",49,disclosure_no,1.0,4,0.0194,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",50,disclosure_no,1.0,4,0.0192,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",51,disclosure_no,1.0,4,0.0188,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",52,disclosure_no,1.0,4,0.0203,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",53,disclosure_no,1.0,4,0.0155,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",54,disclosure_no,1.0,4,0.0144,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",55,disclosure_no,1.0,4,0.0149,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",56,disclosure_no,1.0,4,0.016,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",57,disclosure_no,1.0,4,0.0155,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",58,disclosure_no,1.0,4,0.0157,0.0,False,,,,,0.0,1,1,1,,,0.0
+"offline, hybrid, dated questions scoped, company name kept",59,disclosure_no,1.0,4,0.0151,0.0,False,,,,,0.0,1,1,1,,,0.0

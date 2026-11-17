@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from filings_lab.agent.agent import ClaudeAgent, ExtractiveAgent, build_citations
+from filings_lab.agent.agent import OUT_OF_TURNS, ClaudeAgent, ExtractiveAgent, build_citations
 from filings_lab.agent.retrieval import BM25Index
 from filings_lab.agent.store import DataStore
 from filings_lab.agent.tools import TOOL_DEFS, ToolBox
@@ -98,6 +98,27 @@ def test_claude_agent_loop_repairs_fabricated_citation(store, index):
     assert ans.meta["repaired"] and ans.invalid_citations == [] and len(ans.citations) == 1
     assert ans.turns == 3 and ans.tool_calls[0]["tool"] == "search_filings"
     assert ans.cost_usd == pytest.approx(3 * (2000 * 4 + 300 * 20) / 1e6)
+
+
+class SearchingClaude(ScriptedClaude):
+    """Searches on every turn for as long as the request lets it use tools."""
+
+    def respond(self, kw):
+        if kw.get("tool_choice") == {"type": "none"}:
+            return self._msg([SimpleNamespace(type="text", text="The filings searched do not disclose it.")], "end_turn")
+        return self._msg([SimpleNamespace(type="tool_use", id=f"tu_{len(self.calls)}", name="search_filings",
+                                          input={"query": "guidance", "ticker": None, "form": "8-K",
+                                                 "date_from": None, "date_to": None, "k": 2})], "tool_use")
+
+
+def test_claude_agent_concludes_when_the_search_budget_runs_out(store, index):
+    client = SearchingClaude()
+    ans = ClaudeAgent(ToolBox(store, index), client=client, max_turns=3).ask("Did they disclose a going concern doubt?")
+    assert ans.turns == 3 and len(ans.tool_calls) == 2 and ans.answer.startswith("The filings searched do not")
+    assert ["tool_choice" in c for c in client.calls] == [False, False, True]
+    final = client.calls[-1]["messages"][-2]  # the list is shared with the agent, which appended the reply after the call
+    assert final["role"] == "user" and [b["type"] for b in final["content"]] == ["tool_result", "text"]
+    assert final["content"][-1]["text"] == OUT_OF_TURNS and client.calls[-1]["tools"] == client.calls[0]["tools"]
 
 
 def test_claude_agent_handles_refusal(store, index):

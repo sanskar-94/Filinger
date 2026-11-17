@@ -19,9 +19,9 @@ markets.
 | Pipeline, features, quality gates, walk forward model, statistics | Run end to end on the synthetic world. The Spark and S3 paths produce the same tables as the local run (tests against PySpark and an S3 server) |
 | Real EDGAR | The index, price, event study and XBRL code has run on real data for three companies (190 real filing events). Real filing documents have not been downloaded yet: the SEC needs a declared contact, then `bash scripts/real_run.sh` runs the lab on 100 large companies |
 | LoRA fine tune | Run for real: Qwen2.5 3B in 4 bit, with MLX, on an 8 GB Mac. It learned from the generator's own labels |
-| Frontier teacher | The labelling path is written and 60 filings were labelled once as a reference. The teacher run that would make this a distillation has not happened |
+| Frontier teacher | The labelling path is written and 60 filings were labelled once by a paid frontier model as a reference. A free hosted model (NVIDIA's Nemotron 3 Ultra) was scored as a teacher on 100 gold filings. The teacher run that would make this a distillation has not happened |
 | Retrieval | BM25, dense and hybrid retrieval run and compared on 1,012 query and company pairs |
-| Analyst agent | The offline extractive agent is run and scored on 240 questions with known answers. The hosted model loops (one for a paid API, one for any OpenAI compatible API such as NVIDIA's free endpoints) are tested against scripted clients only; `flab agent-eval --agent openai` scores a model on the same questions once a key is set |
+| Analyst agent | The offline extractive agent is scored on 240 questions with known answers. Two free hosted models ran the tool loop on NVIDIA's endpoints and were scored on 60 fresh questions per retrieval mode, after two development runs. The loop for the paid API is tested against scripted clients only |
 | Live demo | The container for a free Hugging Face Space is written and its start script runs here (page, company list and a cited answer through the public port). The image itself has not been built: no Docker on the machine this was written on. Steps: [deploy/space/README.md](deploy/space/README.md) |
 | Serving | The API, registry, drift checks and a load test have run in the container as the cluster would run it. vLLM on a GPU has not; a CPU stand in with the same routes served the adapters |
 | Kubernetes, EKS, Terraform, Databricks, EMR | Written, and validated in CI where a validator exists (kubeconform, terraform validate, promtool). Never applied to a cloud account |
@@ -36,7 +36,9 @@ markets.
 | Is that tradable? | Barely: break even at 13.6 bps per side, because most of the reaction lands on day 0 | [phase 2](docs/phases/phase2_baseline.md) |
 | Does fine tuning a 3B model work? | Schema valid output goes from 0% to 100% and the extraction score to 0.854, a tie with the rules at 0.860, so production stays on the rules | [phase 3](docs/phases/phase3_llm.md) |
 | Does dense retrieval find what keyword search cannot? | On paraphrased questions nDCG@10 is 0.118 for BM25 and 0.613 for hybrid; on keyword style questions they are equal | [phase 5](docs/phases/phase5_agent.md) |
-| Does the agent cite the right paragraph? | The offline agent gets 0.925 to 1.000 of dated guidance questions right once the question's month scopes the search, and it cannot yet say "not disclosed" | [phase 5](docs/phases/phase5_agent.md) |
+| Does the agent cite the right paragraph? | The offline agent gets 0.925 to 1.000 of dated guidance questions right once the question's month scopes the search, but it cannot say "not disclosed" | [phase 5](docs/phases/phase5_agent.md) |
+| Does a hosted model add anything? | It says "not disclosed" when that is the answer: 0.95 to 1.00 of those questions right, against 0.00 to 0.10 for the offline agent on the same ones. The larger free model got all 120 of its answers right, every citation valid, at no cost | [phase 5](docs/phases/phase5_agent.md#hosted-models-on-nvidias-free-endpoints) |
+| Is a free hosted model a usable teacher? | Every answer schema valid, and 0.900 against the rules' 0.878 on 100 gold filings, a tie (95% CI of the gain -0.005 to 0.048) that is ahead on tone | [phase 3](docs/phases/phase3_llm.md) |
 
 ## Architecture
 
@@ -166,6 +168,13 @@ flab retrieval-eval --lake data/lake --out eval/retrieval
 flab agent-eval --lake data/lake --out eval/agent --retrieval bm25,dense,hybrid
 ```
 
+The same evaluation through a hosted model on NVIDIA's free endpoints, with the key in `.env` (60 questions per
+retrieval mode; under the free rate limit this takes from under an hour to about three, by model):
+
+```bash
+flab agent-eval --agent openai --retrieval bm25,hybrid --per-type 10 --seed 2 --workers 3 --out eval/agent_hosted/nemotron-3-ultra
+```
+
 ## Running on real data
 
 One machine, every stage, resumable, about 1 GB of compressed raw filings for 100 large companies:
@@ -211,8 +220,9 @@ The agent and the labelling run against either of two kinds of hosted model:
 | `NVIDIA_API_KEY` (free, from build.nvidia.com) | `flab agent-eval --agent openai`, `flab llm-label --system api:nvidia/nemotron-3-ultra-550b-a55b`, `flab llm-eval --systems rules,api:nvidia/nemotron-3-ultra-550b-a55b`, and the app's agent when no paid key is set. Any OpenAI compatible API works: set `FLAB_OPENAI_BASE_URL` and `FLAB_OPENAI_MODEL` |
 | `ANTHROPIC_API_KEY` (paid) | the frontier teacher (`flab llm-label`), `flab agent-eval --agent claude`, and the app's agent |
 
-The free tier allows about 40 requests a minute, so the client spaces its requests, backs off on a rate limit, and
-labelling resumes where it stopped.
+The free tier publishes a limit of about 40 requests a minute and in practice answers 429 well below it, so the
+client spaces its requests and halves its pace whenever the API pushes back. Labelling and the agent evaluation
+both save each answer as it arrives and resume where they stopped.
 
 ## Honest scope
 
@@ -274,7 +284,7 @@ configs/           LoRA and QLoRA configs, experiment config
 models/            production and candidate model records (GitOps promotion)
 dashboards/        BI star schema exports, Power BI and Tableau kits
 sql/               DuckDB analysis queries over the lake
-eval/              committed evaluation results: 3B fine tune, frontier sample, retrieval, agent
+eval/              committed evaluation results: 3B fine tune, frontier sample, retrieval, agent, hosted models
 docs/              research notes, one document per phase
 loadtest/          Locust profile of the analyst request mix
 Makefile           entry points; scripts/e2e.sh runs everything on a tiny world
