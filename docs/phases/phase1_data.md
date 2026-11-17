@@ -74,23 +74,50 @@ release to the Item 2.02 section, after the item's own sentence so existing para
 one (SGML wrapper, cover 8-K, EX-99.1, a uuencoded graphic, an XBRL schema) and checks all of it, including that
 both runners read a compressed raw file.
 
-## Checked against real EDGAR so far
+## Run on real EDGAR
 
-On 15 November 2026, for Apple, Microsoft and Nvidia, 2019 to 2024:
+On 17 November 2026 `bash scripts/real_run.sh` ran every stage on real filings: 100 of today's large companies
+(`configs/universe_large_cap.txt`), 2015 to 2024, on an 8 GB M2 in 70 minutes, 56 of them downloading under the
+SEC's rate limit ([summary](../../eval/real/run_summary.json), [quality gates](../../eval/real/dq.md), the model in
+[phase 2](phase2_baseline.md#result-on-real-filings-100-companies-2015-to-2024-12216-out-of-fold-events)).
 
-1. The submissions parser built a real index of 190 filings (132 8-Ks, 44 10-Qs, 14 10-Ks) with acceptance times.
-2. `YahooPriceSource` returned adjusted prices for all three and the market proxy; Apple's four for one split of
-   August 2020 shows no jump in the series.
-3. The event study produced 190 real events. Earnings 8-Ks move about twice as much as other filings (mean
-   absolute 3 day abnormal return 5.1% against 2.8%), and Nvidia's release of 24 May 2023, accepted after the close,
-   lands on 25 May with a day 0 return of plus 24.4%, as it should.
-4. The XBRL parser read Apple's company facts (1,622 rows).
+| Stage | Result |
+|---|---|
+| index | 18,784 filings: 14,870 8-Ks, 2,936 10-Qs, 978 10-Ks, with acceptance times |
+| download | all 18,784, 1.1 GB compressed (8-Ks with their press release exhibits) |
+| prices | 101 tickers with the market proxy, every filing covered |
+| fundamentals | 142,868 XBRL facts for all 100 companies |
+| lake | 43,541 sections, 1,403,426 paragraphs, 18,780 events (475 MB) |
+| quality gates | 20 pass, 2 warn, none fail |
 
-Not yet done: downloading and parsing real filing documents. The SEC serves its filing archive only to tools
-that declare a contact in the User-Agent, and none was configured where this was built. `scripts/real_run.sh`
-runs the whole lab on 100 large companies (`configs/universe_large_cap.txt`, 2015 to 2024) once `SEC_USER_AGENT`
-is set: index, download, prices, fundamentals, lake, features, quality gates and the walk forward model. That
-universe is today's large companies, so it is survivorship biased, and the script says so.
+Sections found: management's discussion in 98.0% of 10-Ks and 10-Qs, risk factors in 94.9% of 10-Ks, the results
+section in 99.0% of earnings 8-Ks. The two warnings: 7 empty sections of 43,541, and features of sections an 8-K
+does not have (risk factors, management's discussion), which are empty for most rows because 79% of the filings
+are 8-Ks. Earnings 8-Ks move prices about twice as much as other 8-Ks (mean absolute 3 day abnormal return 4.2%
+against 1.9%; 10-Qs 2.6%, 10-Ks 2.2%).
+
+A 20 company pilot (2019 to 2024, `configs/universe_pilot.txt`) ran first and found five things the synthetic
+world could not show, each fixed and tested before the full run:
+
+1. A contact line given as an email alone. The SEC asks for a name and an email; the client now declares an email
+   given on its own as `Filinger <email>`.
+2. A ticker that moved. In July 2026 XOM passed to ExxonMobil Holdings Corp, a new registrant with no filings
+   before then, so today's ticker list dropped Exxon's history. A universe file can now pin `XOM=34088`, and the
+   index names any company with no filings in the window instead of leaving it out silently.
+3. A network outage. For some minutes the machine could not resolve www.sec.gov and 849 of 2,132 downloads failed
+   at once. The client now retries timeouts, resets and DNS failures with backoff, and `flab download` makes up to
+   three passes over what failed.
+4. Disk. The HTTP cache kept EDGAR's JSON uncompressed; it is now stored gzip compressed (65 MB to 8 MB).
+5. Real layouts the section parser missed. P&G's 8-Ks run the item header into its text on one line; ExxonMobil's
+   put two headers on one line before the text they share; Bank of America's 10-K puts the company's name between
+   "Item 7." and its title; JPMorgan's reports carry no item headers at all and name them only in a cross reference
+   index. On the pilot, management's discussion went from 94.0% to 99.2% of periodic reports and the results
+   section from 90.3% to 99.6% of earnings 8-Ks.
+
+That universe is today's large companies, so it is survivorship biased: a company that failed or was bought
+between 2015 and 2024 is not in it. An earlier check, on 15 November 2026, built the index, prices, events and
+XBRL facts for Apple, Microsoft and Nvidia alone (190 events; Nvidia's release of 24 May 2023, accepted after the
+close, lands on 25 May with a day 0 return of plus 24.4%, as it should).
 
 ## Data quality gates (`flab dq`)
 
@@ -157,3 +184,8 @@ of raw filing per core second, each terabyte needs about 560 core hours, about 9
 Databricks cluster before I/O effects (conservative, because exhibits and XBRL are dropped early). For
 3,000 companies over 11 years, roughly 330k filings, the download at 8 requests per second takes about 11.5
 hours once (resumable, cached), and bulk `submissions.zip` replaces 3,000 index requests with one download.
+
+Measured on the real run: the 16,533 filings the pilot had not already fetched took 56 minutes to download with
+four workers (about 4.9 filings a second), and all 18,784 take 1.1 GB stored compressed, about 60 KB a filing;
+the local runner then parsed them into 1.4 million paragraphs in about 8 minutes on four processes. Scaled by
+filings, 330k would be about 19 GB compressed and 19 hours of downloading at that pace.

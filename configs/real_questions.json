@@ -1,0 +1,12 @@
+[
+  {"ticker": "WMT", "question": "Did Walmart raise, lower or keep its full year guidance in the earnings release it filed in August 2024?"},
+  {"ticker": "NVDA", "question": "How did the stock react to the earnings release Nvidia filed in May 2024?"},
+  {"ticker": "XOM", "question": "Did ExxonMobil agree to acquire Pioneer Natural Resources, and on what terms?"},
+  {"ticker": "JPM", "question": "What did JPMorgan disclose about its acquisition of First Republic Bank?"},
+  {"ticker": "BA", "question": "What has Boeing disclosed about the Alaska Airlines Flight 1282 accident?"},
+  {"ticker": "PFE", "question": "What did Pfizer say about revenue from its COVID-19 products in 2023?"},
+  {"ticker": "KO", "question": "Has Coca-Cola disclosed a tax dispute with the Internal Revenue Service?"},
+  {"ticker": "AAPL", "question": "What did Apple say drove the change in its gross margin in fiscal 2024?"},
+  {"ticker": "V", "question": "Has Visa said there is substantial doubt about its ability to continue as a going concern?"},
+  {"ticker": "HD", "question": "Has Home Depot announced a new share repurchase authorization?"}
+]

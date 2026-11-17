@@ -35,6 +35,11 @@ def test_client_requires_declared_user_agent():
     with pytest.raises(ValueError):
         EdgarClient(user_agent="Lab ops@lab.org", max_rps=20)
     assert EdgarClient(user_agent="Lab Research ops@lab.org").session.headers["User-Agent"].startswith("Lab")
+    # a contact email on its own is declared under the tool's name; quotes left by a .env line are dropped
+    assert EdgarClient(user_agent="ops@lab.org").session.headers["User-Agent"] == "Filinger ops@lab.org"
+    assert EdgarClient(user_agent='"ops@lab.org"').session.headers["User-Agent"] == "Filinger ops@lab.org"
+    with pytest.raises(ValueError):
+        EdgarClient(user_agent="Lab Research")
 
 
 def test_rate_limiter_caps_throughput():
@@ -73,6 +78,10 @@ def test_client_retries_then_caches(tmp_path):
     finally:
         mod.time.sleep = orig
     assert Sess.calls == 2  # one retry, then served from cache
+    entry = c._cache_path("https://x/y.json")
+    assert entry is not None and entry.read_bytes()[:2] == b"\x1f\x8b"  # stored compressed
+    entry.write_bytes(b'{"plain": 1}')  # an entry from before compression is still read
+    assert c.get_json("https://x/y.json") == {"plain": 1} and Sess.calls == 2
 
 
 def test_urls():
@@ -128,3 +137,40 @@ def test_index_from_bulk_reads_main_and_overflow_pages(tmp_path):
     idx = index_from_bulk(str(path), "2014-01-01", "2024-12-31")
     assert sorted(idx["form"]) == ["10-K", "10-Q"]
     assert set(idx["ticker"]) == {"AAPL"}
+
+
+def test_universe_pins_a_ticker_that_moved_to_a_new_registrant():
+    from filings_lab.edgar.universe import read_universe, resolve_universe
+
+    text = "AAPL XOM=34088  # XOM's history is under the old registrant\nBRK-B NOPE\n"
+    entries = read_universe(text)
+    assert entries == ["AAPL", "XOM=34088", "BRK-B", "NOPE"]
+    today = pd.DataFrame({"cik": [320193, 2115436, 1067983], "ticker": ["AAPL", "XOM", "BRK-B"]})
+    resolved, unknown = resolve_universe(entries, today)
+    assert resolved == {320193: "AAPL", 34088: "XOM", 1067983: "BRK-B"} and unknown == ["NOPE"]
+
+
+def test_client_retries_a_connection_that_fails(monkeypatch):
+    import requests
+
+    import filings_lab.edgar.client as mod
+
+    class Sess:
+        headers: dict = {}
+        calls = 0
+
+        def get(self, url, timeout):
+            Sess.calls += 1
+            if Sess.calls < 3:  # a lapse in DNS, then a reset connection, then an answer
+                raise requests.ConnectionError("Failed to resolve 'www.sec.gov'")
+
+            class Resp:
+                status_code, content = 200, b'{"ok": 1}'
+            return Resp()
+
+    monkeypatch.setattr(mod.time, "sleep", lambda s: None)
+    c = EdgarClient(user_agent="Lab ops@lab.org", max_rps=10, session=Sess())
+    assert c.get_json("https://x/y.json") == {"ok": 1} and Sess.calls == 3
+    Sess.calls = -10  # a connection that never comes back fails after max_retries attempts
+    with pytest.raises(requests.ConnectionError):
+        c.get_bytes("https://x/z.json")

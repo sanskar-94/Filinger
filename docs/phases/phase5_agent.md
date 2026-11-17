@@ -272,6 +272,30 @@ the answers of the first two draws, so those runs' numbers are not evidence, onl
 are patterns: an answer worded in a way they do not expect is marked wrong, so the reports keep every answer beside
 its marks.
 
+### On real filings ([eval/real/agent_examples.md](../../eval/real/agent_examples.md))
+
+The same agent, with the smaller free model and BM25, answered ten questions about real companies from the lake
+built out of their EDGAR filings (the 20 company pilot, 2019 to 2024, 167,227 paragraphs; `scripts/ask_real.py`,
+questions in `configs/real_questions.json`). Real questions have no answer key, so the file prints the full text of
+every cited paragraph under each answer, and each answer was read against its sources:
+
+| Question | Answer | Read against the cited paragraphs |
+|---|---|---|
+| Walmart's guidance in the August 2024 release | raised, with the updated and original ranges | right |
+| Nvidia's reaction to its May 2024 release | day 0 +9.3%, 3 day abnormal return +18.9% | right (from the event table) |
+| ExxonMobil and Pioneer | all stock, $59.5 billion, $253 a share, closed May 2024 with 545 million shares issued | right, but a summary table calls the $59.5 billion "enterprise value", which the filing does not |
+| JPMorgan and First Republic | bought from the FDIC on 1 May 2023, $2.7 billion bargain purchase gain | right |
+| Boeing and Alaska Airlines Flight 1282 | inspections, production slowed, financial impact, the FAA's enhanced inspection | right, except that it calls Spirit Boeing's final assembly site; the paragraph says fuselages are inspected at Spirit |
+| Pfizer's COVID product revenue in 2023 | $13.5 and $8 billion expected, cut by $9 billion to $12.5 billion in October | right, but it puts the $11.5 billion Comirnaty figure on a paragraph that does not state it (a later cited one does) |
+| Coca-Cola and the IRS | the $3.3 billion notice of 2015 and the litigation designation | right, but it calls a 2024 10-Q "the same 10-Q" as one from 2021 |
+| Apple's gross margin in fiscal 2024 | products up on cost savings, offset by mix and currency; services up on services sales | right |
+| Visa and going concern | no such disclosure | right |
+| Home Depot's buyback | the $15 billion authorization of August 2023 | right, but the paragraph is named as "[81357460dc69efca]" without `cite:`, so it is not a citation |
+
+Every headline answer is right and every citation is valid; four answers carry a detail their cited paragraph does
+not support, and one cites in the form the synthetic evaluation also counted wrong. Ten questions chosen by hand
+are a demonstration, not a measurement.
+
 ## API routes (mounted into the Phase 4 service)
 
 `POST /v1/agent/ask`, `POST /v1/feedback`, `GET /v1/companies`, `GET /v1/companies/{ticker}/filings`,

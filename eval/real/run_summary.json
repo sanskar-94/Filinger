@@ -1,0 +1,26 @@
+{
+  "universe": "configs/universe_large_cap.txt (100 of today's large companies, so survivorship biased)",
+  "window": [
+    "2015-01-02",
+    "2024-12-30"
+  ],
+  "filings": 18784,
+  "by_form": {
+    "8-K": 14870,
+    "10-Q": 2936,
+    "10-K": 978
+  },
+  "companies": 100,
+  "raw_bytes_compressed": 1100000000.0,
+  "lake_bytes": 475000000.0,
+  "sections": 43541,
+  "paragraphs": 1403426,
+  "events": 18780,
+  "mean_abs_car_pct": {
+    "earnings_8k": 4.19,
+    "other_8k": 1.92,
+    "10-Q": 2.64,
+    "10-K": 2.17
+  },
+  "wall_clock": "70 minutes on an 8 GB M2, 4 download workers under the SEC's rate limit (16:42 to 17:52, 2026-11-17)"
+}

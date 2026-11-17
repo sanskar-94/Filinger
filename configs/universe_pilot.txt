@@ -1,0 +1,6 @@
+AAPL MSFT NVDA AMZN GOOGL
+JPM BAC GS V
+UNH JNJ PFE
+WMT HD KO PG
+XOM=34088 CAT BA NEE
+# XOM moved to ExxonMobil Holdings Corp in July 2026; its filings before that are under Exxon Mobil Corp, CIK 34088

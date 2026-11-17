@@ -6,6 +6,7 @@ second (token bucket shared by all threads of this process), retries with expone
 """
 from __future__ import annotations
 
+import gzip
 import hashlib
 import re
 import threading
@@ -17,6 +18,15 @@ import requests
 from ..config import get_settings
 
 _UA_RE = re.compile(r".+\s+\S+@\S+\.\S+")
+_EMAIL_RE = re.compile(r"\S+@\S+\.\S+")
+_GZIP_MAGIC = b"\x1f\x8b"
+
+
+def declared_agent(user_agent: str | None) -> str:
+    """The User-Agent to send. The SEC asks for a name and a contact email; a contact email given on its own is
+    declared under the tool's name, so the request still says who is asking and how to reach them."""
+    ua = (user_agent or "").strip().strip('"').strip("'").strip()
+    return f"Filinger {ua}" if _EMAIL_RE.fullmatch(ua) else ua
 
 
 class RateLimiter:
@@ -52,11 +62,12 @@ class EdgarClient:
         max_retries: int = 5,
     ):
         settings = get_settings()
-        ua = user_agent or settings.sec_user_agent
+        ua = declared_agent(user_agent or settings.sec_user_agent)
         if not ua or not _UA_RE.match(ua):
             raise ValueError(
                 "SEC requires a User-Agent with an organisation name and contact email, "
-                "for example 'Acme Research ops@acme.com'. Set SEC_USER_AGENT."
+                "for example 'Acme Research ops@acme.com' (an email alone is sent as 'Filinger <email>'). "
+                "Set SEC_USER_AGENT."
             )
         rps = max_rps or settings.sec_max_rps
         if rps > 10:
@@ -76,15 +87,28 @@ class EdgarClient:
     def get_bytes(self, url: str) -> bytes:
         cached = self._cache_path(url)
         if cached and cached.exists():
-            return cached.read_bytes()
+            data = cached.read_bytes()
+            # entries are written gzip compressed (EDGAR's JSON shrinks about tenfold); early ones were plain
+            return gzip.decompress(data) if data[:2] == _GZIP_MAGIC else data
         delay = 1.0
         for attempt in range(self.max_retries):
             self.limiter.acquire()
-            resp = self.session.get(url, timeout=30)
+            try:
+                resp = self.session.get(url, timeout=30)
+            except requests.RequestException:
+                # a timeout, a reset connection or a lapse in DNS: on the first real download a network outage
+                # failed 849 of 2,132 filings at once, none of them the SEC's doing
+                if attempt == self.max_retries - 1:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 60.0)
+                continue
             if resp.status_code == 200:
                 if cached:
                     cached.parent.mkdir(parents=True, exist_ok=True)
-                    cached.write_bytes(resp.content)
+                    partial = cached.with_name(cached.name + ".partial")
+                    partial.write_bytes(gzip.compress(resp.content, compresslevel=6))
+                    partial.replace(cached)  # a stopped run never leaves half an entry behind
                 return resp.content
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < self.max_retries - 1:
                 time.sleep(delay)

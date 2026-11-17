@@ -14,14 +14,18 @@ if [ -z "${SEC_USER_AGENT:-}" ] && [ -f .env ]; then set -a; . ./.env; set +a; f
 UNIVERSE="${UNIVERSE:-configs/universe_large_cap.txt}"
 START="${START:-2015-01-01}"; END="${END:-2024-12-31}"
 OUT="${OUT:-data/real}"; ART="${ART:-artifacts/real}"; WORKERS="${WORKERS:-4}"
+# raw filings and the HTTP cache can be shared between runs, so a pilot's downloads count toward the full run:
+#   UNIVERSE=configs/universe_pilot.txt START=2019-01-01 OUT=data/real_pilot ART=artifacts/real_pilot \
+#   RAW=data/real/raw CACHE=data/real/http_cache WORKERS=2 bash scripts/real_run.sh
+RAW="${RAW:-$OUT/raw}"; CACHE="${CACHE:-$OUT/http_cache}"
 PRICE_START="$(python -c "import sys, pandas as pd; print((pd.Timestamp(sys.argv[1]) - pd.DateOffset(years=2)).date())" "$START")"
 mkdir -p "$OUT" "$ART"
 
-flab index --tickers "$UNIVERSE" --start "$START" --end "$END" --out "$OUT/index.parquet" --cache "$OUT/http_cache"
-flab download --index "$OUT/index.parquet" --raw "$OUT/raw" --workers "$WORKERS" --compress
+flab index --tickers "$UNIVERSE" --start "$START" --end "$END" --out "$OUT/index.parquet" --cache "$CACHE"
+flab download --index "$OUT/index.parquet" --raw "$RAW" --workers "$WORKERS" --compress
 [ -f "$OUT/prices.parquet" ] || flab prices --index "$OUT/index.parquet" --source yahoo --start "$PRICE_START" --end "$END" --out "$OUT/prices.parquet"
-[ -f "$OUT/facts.parquet" ] || flab facts --index "$OUT/index.parquet" --cache "$OUT/http_cache" --out "$OUT/facts.parquet"
-flab local --index "$OUT/index.parquet" --raw "$OUT/raw" --prices "$OUT/prices.parquet" --lake "$OUT/lake" --workers "$WORKERS"
+[ -f "$OUT/facts.parquet" ] || flab facts --index "$OUT/index.parquet" --cache "$CACHE" --out "$OUT/facts.parquet"
+flab local --index "$OUT/index.parquet" --raw "$RAW" --prices "$OUT/prices.parquet" --lake "$OUT/lake" --workers "$WORKERS"
 flab features --lake "$OUT/lake" --facts "$OUT/facts.parquet"
 # the thresholds were set on the synthetic world; on real filings a failed gate is a finding to read, not a stop
 flab dq --lake "$OUT/lake" --out "$ART/dq" || echo "data quality gates failed: see $ART/dq"

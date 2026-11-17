@@ -30,6 +30,33 @@ def load_company_tickers(client) -> pd.DataFrame:
     return df[["cik", "ticker", "company"]]
 
 
+def read_universe(text: str) -> list[str]:
+    """The entries of a universe file: whitespace separated, with ``#`` starting a comment."""
+    return [t for line in text.splitlines() for t in line.split("#")[0].split()]
+
+
+def resolve_universe(entries: Iterable[str], tickers: pd.DataFrame) -> tuple[dict[int, str], list[str]]:
+    """CIK to ticker for a universe, and the entries EDGAR's ticker list does not know.
+
+    An entry is a ticker, looked up in today's list, or ``TICKER=CIK``, which pins the registrant. A ticker can
+    move to a new registrant, and then today's list points at a company with none of the history: in July 2026
+    XOM moved to ExxonMobil Holdings Corp, while every filing before that is under Exxon Mobil Corp, CIK 34088,
+    whose own ticker field is now empty.
+    """
+    by_ticker = {str(t).upper(): int(c) for t, c in zip(tickers["ticker"], tickers["cik"], strict=True)}
+    resolved: dict[int, str] = {}
+    unknown = []
+    for entry in entries:
+        ticker, _, cik = entry.strip().upper().partition("=")
+        if cik:
+            resolved[int(cik)] = ticker
+        elif ticker in by_ticker:
+            resolved.setdefault(by_ticker[ticker], ticker)
+        else:
+            unknown.append(ticker)
+    return resolved, unknown
+
+
 def _filter(df: pd.DataFrame, forms: Iterable[str], start: str, end: str) -> pd.DataFrame:
     forms = set(forms)
     keep = df["form"].isin(forms) & (df["date_filed"] >= start) & (df["date_filed"] <= end)

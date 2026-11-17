@@ -85,3 +85,38 @@ How to read this:
 Regenerate: `flab features && flab train --permutations 20 --tune` (writes `artifacts/phase2/report.md`,
 `backtest_monthly.csv`, `backtest_cost_curve.csv`, `calibration.csv`). The SQL views in
 `sql/02_tone_quintiles.sql` and `sql/03_monthly_ic.sql` reproduce the headline cuts in DuckDB.
+
+## Result on real filings (100 companies, 2015 to 2024, 12,216 out of fold events)
+
+`bash scripts/real_run.sh` on 100 of today's large companies: 18,784 real filings, the same features, folds and
+tests as above, no setting changed for real data ([report](../../eval/real/phase2_report.md), the run itself in
+[phase 1](phase1_data.md#run-on-real-edgar)).
+
+| Feature set | AUC [95% CI] | monthly IC (NW t) | quintile spread bps (NW t) |
+|---|---|---|---|
+| market and meta (null) | 0.494 [0.484, 0.504] | 0.012 (1.2) | 19 (1.7) |
+| market and fundamentals | 0.498 [0.488, 0.509] | 0.030 (2.6) | 22 (1.2) |
+| text only | 0.504 [0.494, 0.514] | 0.024 (1.8) | 29 (1.7) |
+| all, LightGBM | 0.506 [0.496, 0.516] | 0.035 (2.9) | 31 (2.1) |
+| all, logistic regression | 0.514 [0.504, 0.524] | 0.035 (3.2) | 25 (1.7) |
+
+All versus null: DeLong AUC difference +0.012 (se 0.005), p = 0.028; Diebold Mariano on log loss DM = -1.15,
+p = 0.25. Permutation test, 20 full refits with labels shuffled within month: p = 0.048, again the smallest value
+20 permutations can produce. Backtest at 10 bps per side: +12 bps a month gross, -28 bps net, Sharpe -1.21; break
+even at 3.1 bps per side. Raw probabilities are close to calibrated (expected calibration error 0.021) and isotonic
+recalibration again makes them worse.
+
+How to read this:
+1. Real filing text carries a weak signal about the next three days: a monthly rank correlation of 0.035 with a
+   Newey West t near 3, and a paired AUC gain over the null model of about one point. That is below the 0.52 to
+   0.55 that published work led us to expect, on a sample this size the intervals are about a point wide, and it
+   is not tradable: costs above 3 bps per side erase it, and the reaction lands mostly on day 0.
+2. The ablation says more than the headline. Dropping the market group raises the LightGBM AUC from 0.506 to
+   0.519 (BH q = 0.018): price features add noise the trees fit, and no text group is individually significant.
+   That is one exploratory cut among five, so it is a lead to test on new data, not a result.
+3. The strongest single text feature is the net tone of the earnings release (|IC| 0.071), and the guidance
+   raised indicator is among the twenty most used features. Fundamentals (leverage, revenue growth, accruals)
+   lead the SHAP ranking, which is the control they were put in for.
+4. The universe is today's large companies, so it is survivorship biased; and with 20 companies over 2019 to
+   2024 (1,464 out of fold events, [pilot report](../../eval/real/pilot/phase2_report.md)) every interval spans
+   0.5, which is the sample size argument for running all 100.

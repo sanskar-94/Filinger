@@ -10,14 +10,14 @@ agent whose every statement links to the filing paragraph it came from.
 
 ## What has run, and what has not
 
-Every number below comes from a synthetic EDGAR shaped world (60 companies, 2012 to 2024) that plants a weak,
-known link between language and returns. It checks the machinery against a known answer. It is not a claim about
-markets.
+Most numbers below come from a synthetic EDGAR shaped world (60 companies, 2012 to 2024) that plants a weak,
+known link between language and returns: it checks the machinery against a known answer and is not a claim about
+markets. The rows marked real come from 18,784 real filings of 100 large companies.
 
 | Part | Status |
 |---|---|
 | Pipeline, features, quality gates, walk forward model, statistics | Run end to end on the synthetic world. The Spark and S3 paths produce the same tables as the local run (tests against PySpark and an S3 server) |
-| Real EDGAR | The index, price, event study and XBRL code has run on real data for three companies (190 real filing events). Real filing documents have not been downloaded yet: the SEC needs a declared contact, then `bash scripts/real_run.sh` runs the lab on 100 large companies |
+| Real EDGAR | Run end to end: 18,784 real filings of 100 large companies, 2015 to 2024, through download, parsing (1.4 million paragraphs), events, fundamentals, quality gates and the walk forward model, in 70 minutes on an 8 GB Mac. The analyst agent answered questions about the real filings |
 | LoRA fine tune | Run for real: Qwen2.5 3B in 4 bit, with MLX, on an 8 GB Mac. It learned from the generator's own labels |
 | Frontier teacher | The labelling path is written and 60 filings were labelled once by a paid frontier model as a reference. A free hosted model (NVIDIA's Nemotron 3 Ultra) was scored as a teacher on 100 gold filings. The teacher run that would make this a distillation has not happened |
 | Retrieval | BM25, dense and hybrid retrieval run and compared on 1,012 query and company pairs |
@@ -28,12 +28,15 @@ markets.
 | A/B experiment | Assignment, logging and the readout run on simulated users |
 | Dashboards | Star schema exports with DAX and Tableau kits. No dashboard is published |
 
-## Results so far (synthetic world)
+## Results so far
 
 | Question | Result | Where |
 |---|---|---|
-| Does filing text add to price and filing type features? | AUC 0.569 [0.552, 0.587] against 0.500 for the null model; paired DeLong p below 1e-9 | [phase 2](docs/phases/phase2_baseline.md) |
-| Is that tradable? | Barely: break even at 13.6 bps per side, because most of the reaction lands on day 0 | [phase 2](docs/phases/phase2_baseline.md) |
+| Real: does filing text predict how the stock reacts? | Weakly. On 12,216 out of fold events of 100 companies, a monthly rank correlation of 0.035 (Newey West t 2.9) and an AUC gain of 0.012 over price and filing type features (paired DeLong p = 0.028); the AUC itself is 0.506 to 0.514 | [phase 2](docs/phases/phase2_baseline.md#result-on-real-filings-100-companies-2015-to-2024-12216-out-of-fold-events) |
+| Real: is that tradable? | No: +12 bps a month before costs, gone above 3.1 bps per side | [phase 2](docs/phases/phase2_baseline.md#result-on-real-filings-100-companies-2015-to-2024-12216-out-of-fold-events) |
+| Real: does the pipeline hold up on real filings? | Every stage ran on 18,784 filings; management's discussion found in 98% of 10-Ks and 10-Qs and the results section in 99% of earnings 8-Ks, after a pilot exposed five problems synthetic data could not | [phase 1](docs/phases/phase1_data.md#run-on-real-edgar) |
+| Synthetic: does filing text add to price and filing type features? | AUC 0.569 [0.552, 0.587] against 0.500 for the null model; paired DeLong p below 1e-9 | [phase 2](docs/phases/phase2_baseline.md) |
+| Synthetic: is that tradable? | Barely: break even at 13.6 bps per side, because most of the reaction lands on day 0 | [phase 2](docs/phases/phase2_baseline.md) |
 | Does fine tuning a 3B model work? | Schema valid output goes from 0% to 100% and the extraction score to 0.854, a tie with the rules at 0.860, so production stays on the rules | [phase 3](docs/phases/phase3_llm.md) |
 | Does dense retrieval find what keyword search cannot? | On paraphrased questions nDCG@10 is 0.118 for BM25 and 0.613 for hybrid; on keyword style questions they are equal | [phase 5](docs/phases/phase5_agent.md) |
 | Does the agent cite the right paragraph? | The offline agent gets 0.925 to 1.000 of dated guidance questions right once the question's month scopes the search, but it cannot say "not disclosed" | [phase 5](docs/phases/phase5_agent.md) |
@@ -177,7 +180,8 @@ flab agent-eval --agent openai --retrieval bm25,hybrid --per-type 10 --seed 2 --
 
 ## Running on real data
 
-One machine, every stage, resumable, about 1 GB of compressed raw filings for 100 large companies:
+One machine, every stage, resumable: 1.1 GB of compressed raw filings and about 70 minutes for 100 large
+companies over ten years (a contact email on its own also works; it is sent as `Filinger <email>`):
 
 ```bash
 export SEC_USER_AGENT="Your Org you@example.com"
@@ -228,8 +232,10 @@ both save each answer as it arrives and resume where they stopped.
 
 The synthetic world plants a weak, known relationship between language and returns so that every stage can
 be executed and checked against the truth. Its results validate the machinery, not a trading claim. On real
-filings, published work suggests out of sample AUC around 0.52 to 0.55; the lab treats anything above 0.65 as
-a leakage bug until proven otherwise. The LLM method was run for real on a 5.2M parameter model pretrained
+filings, published work suggested out of sample AUC around 0.52 to 0.55, and the lab treats anything above 0.65 as
+a leakage bug until proven otherwise. The real run came in below that range (0.506 to 0.514 on 100 of today's
+large companies, a survivorship biased universe), with a small but significant gain from text and no tradable
+edge after costs. The LLM method was run for real on a 5.2M parameter model pretrained
 from scratch on a CPU: fine tuning took schema valid output from 0% to 100% on 400 gold filings, but a model
 that small scores 0.38 against the rules' 0.85, so the gate keeps the rules in production. As the frontier
 reference, a frontier model labelled 60 gold filings blind and scored 0.909 against the rules' 0.859 on the same filings
@@ -284,7 +290,7 @@ configs/           LoRA and QLoRA configs, experiment config
 models/            production and candidate model records (GitOps promotion)
 dashboards/        BI star schema exports, Power BI and Tableau kits
 sql/               DuckDB analysis queries over the lake
-eval/              committed evaluation results: 3B fine tune, frontier sample, retrieval, agent, hosted models
+eval/              committed evaluation results: 3B fine tune, frontier sample, retrieval, agent, hosted models, real filings
 docs/              research notes, one document per phase
 loadtest/          Locust profile of the analyst request mix
 Makefile           entry points; scripts/e2e.sh runs everything on a tiny world

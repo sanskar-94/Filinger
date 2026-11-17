@@ -23,16 +23,28 @@ def cmd_index(a):
     import pandas as pd
 
     from .edgar.client import EdgarClient
-    from .edgar.universe import index_from_api, index_from_bulk, load_company_tickers
+    from .edgar.universe import index_from_api, index_from_bulk, load_company_tickers, read_universe, resolve_universe
 
     if a.bulk:
         idx = index_from_bulk(a.bulk, a.start, a.end)
     else:
         client = EdgarClient(cache_dir=a.cache)
         tickers = load_company_tickers(client)
-        wanted = [t.strip().upper() for t in Path(a.tickers).read_text().split()] if a.tickers else None
-        ciks = tickers[tickers["ticker"].isin(wanted)]["cik"] if wanted else tickers["cik"].head(a.limit)
-        idx = index_from_api(client, ciks.unique(), a.start, a.end)
+        universe: dict[int, str] = {}
+        if a.tickers:
+            universe, unknown = resolve_universe(read_universe(Path(a.tickers).read_text()), tickers)
+            if unknown:
+                print(f"not in EDGAR's ticker list, left out: {' '.join(unknown)}")
+            ciks = list(universe)
+        else:
+            ciks = list(tickers["cik"].head(a.limit).unique())
+        idx = index_from_api(client, ciks, a.start, a.end)
+        if universe:  # the universe's ticker, which a pinned registrant's own record may no longer carry
+            idx["ticker"] = idx["cik"].astype(int).map(universe).fillna(idx["ticker"])
+            empty = [t for c, t in universe.items() if c not in set(idx["cik"].astype(int))]
+            if empty:
+                print(f"no filings between {a.start} and {a.end}, so left out: {' '.join(empty)} "
+                      "(a ticker that moved to a new registrant can be pinned in the universe file as TICKER=CIK)")
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     idx.to_parquet(a.out, index=False)
     print(f"{len(idx)} filings from {idx['cik'].nunique()} companies -> {a.out}")
@@ -41,13 +53,21 @@ def cmd_index(a):
 
 
 def cmd_download(a):
+    import time
+
     from . import storage
     from .edgar.client import EdgarClient
     from .edgar.download import download_filings
 
     idx = storage.read_parquet(a.index)
-    out = download_filings(EdgarClient(), idx, a.raw, workers=a.workers, exhibits=not a.no_exhibits,
-                           compress=a.compress)
+    client = EdgarClient()
+    for attempt in range(1, a.passes + 1):  # files already on disk are skipped, so a pass costs only what failed
+        out = download_filings(client, idx, a.raw, workers=a.workers, exhibits=not a.no_exhibits, compress=a.compress)
+        failed = int(out["download_status"].str.startswith("error").sum())
+        if not failed or attempt == a.passes:
+            break
+        print(f"pass {attempt}: {failed} filings failed, trying them again in {a.pause:.0f} s", flush=True)
+        time.sleep(a.pause)
     storage.write_parquet(out, a.index)
     print(out["download_status"].str.split(":").str[0].value_counts())
 
@@ -153,6 +173,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--workers", type=int, default=4)
     s.add_argument("--no-exhibits", action="store_true", help="fetch only the primary document of an 8-K")
     s.add_argument("--compress", action="store_true", help="store raw filings gzip compressed")
+    s.add_argument("--passes", type=int, default=3, help="passes over the filings that failed (a network outage passes)")
+    s.add_argument("--pause", type=float, default=120.0, help="seconds between passes")
     s.set_defaults(fn=cmd_download)
 
     s = sub.add_parser("prices", help="daily prices for every ticker in the index plus the market proxy")
