@@ -29,6 +29,8 @@ def to_mlx_dataset(src_dir: str | Path, out_dir: str | Path) -> dict[str, int]:
         if not f.exists():
             continue
         rows = [json.loads(x) for x in f.read_text().splitlines() if x.strip()]
+        if not rows:  # a teacher labelled dataset has no test split (the student is scored on the truth's gold set)
+            continue
         (out / f"{target}.jsonl").write_text(
             "\n".join(json.dumps({"messages": r["prompt"] + r["completion"]}) for r in rows) + "\n")
         counts[target] = len(rows)

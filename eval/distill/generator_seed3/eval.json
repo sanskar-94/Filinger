@@ -1,0 +1,52 @@
+{
+  "summary": {
+    "rules": {
+      "n": 400,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.5408143345361047,
+      "management_tone_acc": 0.545,
+      "liquidity_concern_f1": 0.89937106918239,
+      "liquidity_concern_acc": 0.9975,
+      "litigation_risk_f1": 1.0,
+      "litigation_risk_acc": 1.0,
+      "extraction_score": 0.8600463509296237,
+      "quote_grounding_rate": 1.0,
+      "latency_p50_s": 0.0001912919688038528,
+      "latency_p95_s": 0.000281237275339663,
+      "cost_per_1k_usd": 0.0
+    },
+    "student-generator-1000-seed3": {
+      "n": 400,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.585652769257583,
+      "management_tone_acc": 0.59,
+      "liquidity_concern_f1": 0.4981179422835634,
+      "liquidity_concern_acc": 0.9925,
+      "litigation_risk_f1": 0.9730440056607588,
+      "litigation_risk_acc": 0.9975,
+      "extraction_score": 0.7642036793004763,
+      "quote_grounding_rate": 0.9975,
+      "latency_p50_s": 3.1451708960230462,
+      "latency_p95_s": 4.011907892016461,
+      "cost_per_1k_usd": 0.0
+    }
+  },
+  "comparisons": {
+    "student-generator-1000-seed3 vs rules": {
+      "diff": -0.09584267162914739,
+      "ci_low": -0.13525817769501317,
+      "ci_high": 0.013149947611791104,
+      "p_le_0": 0.902
+    }
+  },
+  "gold": {
+    "n": 400,
+    "sha256": "aeca7fc45021b9bd0ec447591b25c6981f52826e099e6ba3f84ff0ef3e7ae261"
+  }
+}

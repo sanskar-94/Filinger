@@ -84,23 +84,35 @@ def cmd_label(a):
 
     inputs, _ = _inputs(a.lake, a.budget)
     keys = sorted(inputs)
+    only, workers = getattr(a, "only", None), getattr(a, "workers", 1)
+    if only:  # the filings of given dataset files, so a student's test filings are never shown to its teacher
+        wanted = {json.loads(x)["accession"] for f in only.split(",") for x in Path(f).read_text().splitlines() if x.strip()}
+        keys = [k for k in keys if k in wanted]
     random.Random(0).shuffle(keys)
     chosen = [inputs[k] for k in keys[: a.limit]]
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    if a.system:  # any other teacher, one request at a time; a free API is rate limited, so the run resumes
+    if a.system:  # any other teacher; a free API is rate limited, so each label is saved as it arrives and the run resumes
         ex = make_system(a.system)
         done = {json.loads(x)["accession"] for x in out.read_text().splitlines() if x.strip()} if out.exists() else set()
         todo = [i for i in chosen if i.accession not in done]
         ok = 0
         with open(out, "a") as fh:
-            for n, inp in enumerate(todo, start=1):
-                r = ex.extract(inp)
+            if workers > 1:  # one shared client keeps every thread inside the API's request rate
+                from concurrent.futures import ThreadPoolExecutor
+
+                pool = ThreadPoolExecutor(workers)
+                results = pool.map(ex.extract, todo)
+            else:
+                pool, results = None, map(ex.extract, todo)
+            for n, r in enumerate(results, start=1):
                 ok += r.schema_valid
                 fh.write(json.dumps(r.to_dict()) + "\n")
                 fh.flush()
                 if n % 25 == 0:
-                    print(f"{n} of {len(todo)} labelled, {ok} schema valid")
+                    print(f"{n} of {len(todo)} labelled, {ok} schema valid", flush=True)
+            if pool:
+                pool.shutdown()
         print(f"{ok}/{len(todo)} labelled now by {ex.name}, {len(done)} already there -> {out}")
         return
     if a.mode == "batch":
@@ -184,6 +196,9 @@ def _reg_label(p):
     p.add_argument("--mode", choices=["batch", "realtime"], default="batch")
     p.add_argument("--limit", type=int, default=3000)
     p.add_argument("--budget", type=int, default=12_000)
+    p.add_argument("--only", default=None,
+                   help="comma separated dataset JSONL files: label only their filings (a student's train and val splits)")
+    p.add_argument("--workers", type=int, default=1, help="filings labelled at once with --system")
     p.set_defaults(fn=lambda a: cmd_label(_with_default_model(a)))
 
 

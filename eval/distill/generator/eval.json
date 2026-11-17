@@ -1,0 +1,52 @@
+{
+  "summary": {
+    "rules": {
+      "n": 400,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.5408143345361047,
+      "management_tone_acc": 0.545,
+      "liquidity_concern_f1": 0.89937106918239,
+      "liquidity_concern_acc": 0.9975,
+      "litigation_risk_f1": 1.0,
+      "litigation_risk_acc": 1.0,
+      "extraction_score": 0.8600463509296237,
+      "quote_grounding_rate": 1.0,
+      "latency_p50_s": 0.00018970848759636283,
+      "latency_p95_s": 0.00027460594428703185,
+      "cost_per_1k_usd": 0.0
+    },
+    "student-generator-1000": {
+      "n": 400,
+      "json_valid_rate": 1.0,
+      "schema_valid_rate": 1.0,
+      "guidance_direction_f1": 1.0,
+      "guidance_direction_acc": 1.0,
+      "management_tone_f1": 0.5962452542432874,
+      "management_tone_acc": 0.6,
+      "liquidity_concern_f1": 1.0,
+      "liquidity_concern_acc": 1.0,
+      "litigation_risk_f1": 1.0,
+      "litigation_risk_acc": 1.0,
+      "extraction_score": 0.8990613135608219,
+      "quote_grounding_rate": 1.0,
+      "latency_p50_s": 3.025122167018708,
+      "latency_p95_s": 3.3976526809914502,
+      "cost_per_1k_usd": 0.0
+    }
+  },
+  "comparisons": {
+    "student-generator-1000 vs rules": {
+      "diff": 0.03901496263119819,
+      "ci_low": 0.0043752465396807,
+      "ci_high": 0.1431827134620174,
+      "p_le_0": 0.01
+    }
+  },
+  "gold": {
+    "n": 400,
+    "sha256": "aeca7fc45021b9bd0ec447591b25c6981f52826e099e6ba3f84ff0ef3e7ae261"
+  }
+}

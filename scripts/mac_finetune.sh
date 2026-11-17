@@ -21,6 +21,12 @@ ITERS=${ITERS:-2000}
 LAYERS=${LAYERS:-16}
 LIMIT=${LIMIT:-400}
 VAL_BATCHES=${VAL_BATCHES:-25}
+# a student trained on teacher labels is still scored against the generator's truth: point GOLD at that gold set.
+# BASE_EVAL=0 skips the base model (it does not change between runs), and EXTRA_SYSTEMS adds specs to compare,
+# for example an earlier adapter's saved predictions: replay:eval/mac_3b/predictions/qwen3b-4bit-lora.jsonl@earlier
+GOLD=${GOLD:-$DATA/gold.jsonl}
+BASE_EVAL=${BASE_EVAL:-1}
+EXTRA_SYSTEMS=${EXTRA_SYSTEMS:-}
 
 if [ "${SMOKE:-0}" = "1" ]; then  # every step for real, on the small model pretrained by flab llm-pretrain
   MODEL=artifacts/tiny-base
@@ -48,8 +54,11 @@ python -m mlx_lm lora --model "$MODEL" --train --data "$OUT/mlx_data" --adapter-
   --val-batches "$VAL_BATCHES" --save-every 500 --seed 0 2>&1 | tee "$OUT/train.log"
 
 # 3. evaluate production (rules), the base model and the fine tuned model on the same gold filings
-flab llm-eval --gold "$DATA/gold.jsonl" --limit "$LIMIT" --prompt-style compact \
-  --systems "rules,mlx:${MODEL}@${NAME}-base,mlx:${MODEL}|${OUT}/adapter@${NAME}-lora" \
+SYSTEMS="rules"
+if [ "$BASE_EVAL" = "1" ]; then SYSTEMS="$SYSTEMS,mlx:${MODEL}@${NAME}-base"; fi
+if [ -n "$EXTRA_SYSTEMS" ]; then SYSTEMS="$SYSTEMS,$EXTRA_SYSTEMS"; fi
+flab llm-eval --gold "$GOLD" --limit "$LIMIT" --prompt-style compact \
+  --systems "$SYSTEMS,mlx:${MODEL}|${OUT}/adapter@${NAME}-lora" \
   --reference rules --out "$OUT/eval"
 
 # 4. gate, then register the adapter with its verdict; serving it stays a reviewed pull request
