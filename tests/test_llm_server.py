@@ -58,5 +58,6 @@ def test_openai_compat_extractor_against_the_server(served):
 
     ex = OpenAICompatExtractor("http://llm/v1", "filings-extractor", session=Session(), style="compact", max_tokens=16)
     res = ex.extract(ExtractionInput("acc", "8-K", "C", [{"section": "mdna", "text": "Revenue guidance raised."}]))
-    assert res.error is None or res.error.startswith(("no json", "json", "schema"))  # random weights: not valid JSON
+    # random weights write no valid JSON, and with 16 tokens the server stops at the cap, which the error now names
+    assert res.error is None or res.error.startswith(("no json", "json", "schema", "cut off at max_tokens (16)"))
     assert res.output_tokens > 0
